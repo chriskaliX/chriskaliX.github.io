@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" >
+
+<title>Thinkphp 5.0.24 反序列化链分析 | chriskali&#39;s blog</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1592112345647">
+<link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
+
+
+
+<link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+
+
+    <meta name="description" content="具体分析
+
+这里非常的长，比较复杂，推荐两个文章
+https://www.anquanke.com/post/id/196364#h2-5
+http://althims.com/2020/02/07/thinkphp-5-0-24-unse..." />
+    <meta name="keywords" content="" />
+  </head>
+  <body>
+    <div id="app" class="main">
+
+      <div class="sidebar" :class="{ 'full-height': menuVisible }">
+  <div class="top-container" data-aos="fade-right">
+    <div class="top-header-container">
+      <a class="site-title-container" href="https://chriskalix.github.io">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1592112345647" class="site-logo">
+        <h1 class="site-title">chriskali&#39;s blog</h1>
+      </a>
+      <div class="menu-btn" @click="menuVisible = !menuVisible">
+        <div class="line"></div>
+      </div>
+    </div>
+    <div>
+      
+        
+          <a href="/" class="site-nav">
+            首页
+          </a>
+        
+      
+        
+          <a href="/archives" class="site-nav">
+            归档
+          </a>
+        
+      
+        
+          <a href="/tags" class="site-nav">
+            标签
+          </a>
+        
+      
+        
+          <a href="/post/about" class="site-nav">
+            关于
+          </a>
+        
+      
+    </div>
+  </div>
+  <div class="bottom-container" data-aos="flip-up" data-aos-offset="0">
+    <div class="social-container">
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    </div>
+    <div class="site-description">
+      Keep learning
+    </div>
+    <div class="site-footer">
+      chriskalix | <a class="rss" href="https://chriskalix.github.io/atom.xml" target="_blank">RSS</a>
+    </div>
+  </div>
+</div>
+
+
+      <div class="main-container">
+        <div class="content-container" data-aos="fade-up">
+          <div class="post-detail">
+            <h2 class="post-title">Thinkphp 5.0.24 反序列化链分析</h2>
+            <div class="post-date">2020-06-14</div>
+            
+            <div class="post-content" v-pre>
+              <h2 id="具体分析">具体分析</h2>
+<blockquote>
+<p>这里非常的长，比较复杂，推荐两个文章<br>
+https://www.anquanke.com/post/id/196364#h2-5<br>
+http://althims.com/2020/02/07/thinkphp-5-0-24-unserialize/<br>
+这里主要是记录一下我跟着其他作者的文章分析的流程</p>
+</blockquote>
+<h3 id="入口点">入口点</h3>
+<p>首先找到 <code>__destruct</code> 选择<code>/thinkphp/library/think/process/pipes/Windows.php</code>下的，代码如下</p>
+<pre><code class="language-php">public function __destruct()
+{
+    $this-&gt;close();
+    $this-&gt;removeFiles();
+}
+</code></pre>
+<p>跟进<code>removeFiles()</code></p>
+<pre><code class="language-php">private function removeFiles()
+{
+    foreach ($this-&gt;files as $filename) {
+        if (file_exists($filename)) {
+            @unlink($filename);
+        }
+    }
+    $this-&gt;files = [];
+}
+</code></pre>
+<p>这边的<code>$files</code>可控，通过向<code>file_exists</code>任意类来触发<code>__toString()</code>，那么继续跟进寻找，在<code>/thinkphp/library/think/Model.php</code>中找到</p>
+<pre><code class="language-php">public function __toString() // 全局搜索__toString，找到这里，继续跟进
+{
+    return $this-&gt;toJson();
+}
+</code></pre>
+<pre><code class="language-php">public function toJson($options = JSON_UNESCAPED_UNICODE) // 调用toArray，继续跟进
+{
+    return json_encode($this-&gt;toArray(), $options);
+}
+</code></pre>
+<p>调用了<code>toArray()</code>，继续跟进，这边函数太长，提取出关键字段</p>
+<h3 id="分析难点">分析难点</h3>
+<p>这边分析是一个转折点，有几次赋值和方法，跟着别的作者文章看的时候觉得这里比较复杂</p>
+<pre><code class="language-php">public function toArray() // toArray这里是难点，仔细分析，因为我们的最终目的是执行__call，所以找到三处疑似利用点
+{
+    $item    = [];
+    $visible = [];
+    $hidden  = [];
+    ...
+    if (!empty($this-&gt;append)) {    // [*] 一: append不能为空 (这里append是可控的)
+        foreach ($this-&gt;append as $key =&gt; $name) {
+            if (is_array($name)) {  // [*] 二: $name是否是array (显然也是可控)
+                $relation   = $this-&gt;getAttr($key);
+                $item[$key] = $relation-&gt;append($name)-&gt;toArray();
+            } elseif (strpos($name, '.')) { // [*] 三: $name中是否包含 . ，包含的话进到这个循环
+                list($key, $attr) = explode('.', $name);
+                $relation   = $this-&gt;getAttr($key);
+                /** 第一处 **/
+                $item[$key] = $relation-&gt;append([$attr])-&gt;toArray();
+            } else {
+                $relation = Loader::parseName($name, 1, false); // $name可控，跟进函数(只是修改函数命名)
+                if (method_exists($this, $relation)) {          // [*] 四: 判断该方法是否存在于类中
+                    $modelRelation = $this-&gt;$relation(); // 调用该方法并赋值$modelRelation (这边找到的是getError函数)
+                    $value         = $this-&gt;getRelationData($modelRelation); //跟进getRelationData -&gt; 639行
+
+                    if (method_exists($modelRelation, 'getBindAttr')) { // [*] 五: 满足返回的函数存在getBindAttr
+                        /** 第二处 **/
+                        $bindAttr = $modelRelation-&gt;getBindAttr();
+                        if ($bindAttr) {                           // [*] 六: 值存在则继续
+                            foreach ($bindAttr as $key =&gt; $attr) {
+                                $key = is_numeric($key) ? $attr : $key;
+                                if (isset($this-&gt;data[$key])) {
+                                    throw new Exception('bind attr has exists:' . $key);
+                                } else {    // [*] 七: this-&gt;data[$key]没有赋值
+                                    /** 第三处 **/
+                                    $item[$key] = $value ? $value-&gt;getAttr($attr) : null;
+                                }
+                            }
+                            continue;
+                        }
+                    }
+                    $item[$name] = $value;
+                } else {
+                    $item[$name] = $this-&gt;getAttr($name);
+                }
+            }
+        }
+    }
+    return !empty($item) ? $item : [];
+}
+</code></pre>
+<p>这里选用第三处作为跳转点，看到判断点四下有两个赋值操作</p>
+<pre><code class="language-php">$modelRelation = $this-&gt;$relation(); // 调用该方法并赋值$modelRelation (这边找到的是getError函数)
+$value         = $this-&gt;getRelationData($modelRelation); // 跟进getRelationData -&gt; 639行
+</code></pre>
+<p>这里的<code>$relation</code>是可控的，在<code>Model.php</code>下可控的函数选择 <code>getError</code></p>
+<pre><code class="language-php">public function getError()
+{
+    return $this-&gt;error; // 这里的error是可以控制的，所以选择这里
+}
+</code></pre>
+<p>然后跟进<code>$value=$this-&gt;getRelationData($modelRelation);</code></p>
+<pre><code class="language-php">protected function getRelationData(Relation $modelRelation)
+{
+    if ($this-&gt;parent &amp;&amp; !$modelRelation-&gt;isSelfRelation() &amp;&amp; get_class($modelRelation-&gt;getModel()) == get_class($this-&gt;parent)) {
+        $value = $this-&gt;parent;
+    } else {
+        // 首先获取关联数据
+        if (method_exists($modelRelation, 'getRelation')) {
+            $value = $modelRelation-&gt;getRelation();
+        } else {
+            throw new BadMethodCallException('method not exists:' . get_class($modelRelation) . '-&gt; getRelation');
+        }
+    }
+    return $value;
+}
+</code></pre>
+<p>首先要满足穿来的<code>$modelRelation</code>是Relation类，全局查找getRelation方法且为Relation类的类，找到 <code>HasOne``(/thinkphp/library/think/model/relation/HasOne.php)</code></p>
+<pre><code class="language-php">public function getRelation($subRelation = '', $closure = null)
+{
+    // 执行关联定义方法
+    $localKey = $this-&gt;localKey;
+    if ($closure) {
+        call_user_func_array($closure, [ &amp; $this-&gt;query]);
+    }
+    // 判断关联类型执行查询
+    $relationModel = $this-&gt;query
+        -&gt;removeWhereField($this-&gt;foreignKey)
+        -&gt;where($this-&gt;foreignKey, $this-&gt;parent-&gt;$localKey)
+        -&gt;relation($subRelation)
+        -&gt;find();
+
+    if ($relationModel) {
+        $relationModel-&gt;setParent(clone $this-&gt;parent);
+    }
+
+    return $relationModel;
+}
+</code></pre>
+<p>可以看到满足条件，那么回到<code>Model.php</code>中继续跟进到第三处，执行到<code>Output.php</code>的__call函数，调用了block，跟进block</p>
+<pre><code class="language-php">protected function block($style, $message)
+{
+    $this-&gt;writeln(&quot;&lt;{$style}&gt;{$message}&lt;/$style&gt;&quot;);
+}
+</code></pre>
+<pre><code class="language-php">public function writeln($messages, $type = self::OUTPUT_NORMAL)
+{
+    $this-&gt;write($messages, true, $type);
+}
+</code></pre>
+<pre><code class="language-php">public function write($messages, $newline = false, $type = self::OUTPUT_NORMAL)
+{
+    $this-&gt;handle-&gt;write($messages, $newline, $type);
+}
+</code></pre>
+<p>handle可控，看看有没有别的write，<code>/thinkphp/library/think/session/driver/Memcached.php</code>中有</p>
+<pre><code class="language-php">public function write($sessID, $sessData)
+{
+    return $this-&gt;handler-&gt;set($this-&gt;config['session_name'] . $sessID, $sessData, $this-&gt;config['expire']);
+}
+</code></pre>
+<p>跟到了set跳板，全局找到<code>/thinkphp/library/think/cache/driver/File.php</code>下的set</p>
+<pre><code class="language-php">public function set($name, $value, $expire = null) // 跟到set
+{
+    if (is_null($expire)) {
+        $expire = $this-&gt;options['expire'];
+    }
+    if ($expire instanceof \DateTime) {
+        $expire = $expire-&gt;getTimestamp() - time();
+    }
+    $filename = $this-&gt;getCacheKey($name, true); // name可控，继续跟进
+    if ($this-&gt;tag &amp;&amp; !is_file($filename)) {
+        $first = true;
+    }
+    $data = serialize($value);
+    if ($this-&gt;options['data_compress'] &amp;&amp; function_exists('gzcompress')) {
+        //数据压缩
+        $data = gzcompress($data, 3);
+    }
+    $data   = &quot;&lt; ?php\n//&quot; . sprintf('%012d', $expire) . &quot;\n exit();?&gt;\n&quot; . $data;
+    $result = file_put_contents($filename, $data);
+    if ($result) {
+        isset($first) &amp;&amp; $this-&gt;setTagItem($filename);
+        clearstatcache();
+        return true;
+    } else {
+        return false;
+    }
+}
+</code></pre>
+<p>这里写入函数file_put_contents的$filename由getCacheKey来，跟进看</p>
+<pre><code class="language-php">protected function getCacheKey($name, $auto = false)
+{
+    $name = md5($name);
+    if ($this-&gt;options['cache_subdir']) {
+        // 使用子目录
+        $name = substr($name, 0, 2) . DS . substr($name, 2);
+    }
+    if ($this-&gt;options['prefix']) {
+        $name = $this-&gt;options['prefix'] . DS . $name;
+    }
+    $filename = $this-&gt;options['path'] . $name . '.php';//用协议
+    $dir      = dirname($filename);
+
+    if ($auto &amp;&amp; !is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+    return $filename;
+}
+</code></pre>
+<p>options是可控的，继续回去看<span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>d</mi><mi>a</mi><mi>t</mi><mi>a</mi><mi mathvariant="normal">与</mi></mrow><annotation encoding="application/x-tex">data与</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.69444em;vertical-align:0em;"></span><span class="mord mathdefault">d</span><span class="mord mathdefault">a</span><span class="mord mathdefault">t</span><span class="mord mathdefault">a</span><span class="mord cjk_fallback">与</span></span></span></span>value有关</p>
+<pre><code class="language-php">$data = serialize($value);
+...
+$data   = &quot;&lt;?php\n//&quot; . sprintf('%012d', $expire) . &quot;\n exit();?&gt;\n&quot; . $data;
+</code></pre>
+<p>这里的$value进来是true，所以这里不可控，但是写完后会调用setTagItem，这里在<code>Driver.php</code>里</p>
+<pre><code class="language-php">protected function setTagItem($name)
+{
+    if ($this-&gt;tag) {
+        $key       = 'tag_' . md5($this-&gt;tag);
+        $this-&gt;tag = null;
+        if ($this-&gt;has($key)) {
+            $value   = explode(',', $this-&gt;get($key));
+            $value[] = $name;
+            $value   = implode(',', array_unique($value));
+        } else {
+            $value = $name;
+        }
+        $this-&gt;set($key, $value, 0); //再次调用set
+    }
+}
+</code></pre>
+<p>可以看到这里的值都是可控的，再调用了set，所以可以成功的写入文件</p>
+<h2 id="总结">总结</h2>
+<ol>
+<li>windows下写poc的tips1，（感谢osword小刀师傅），写入&lt;?exp.php，相当于exp.php，另外一个https://xz.aliyun.com/t/7310。自行更改后即可~</li>
+<li>要找一个有写入权限的目录</li>
+</ol>
+
+            </div>
+            
+            
+              <div class="next-post">
+                <div class="next">下一篇</div>
+                <a href="https://chriskalix.github.io/post/thinkphp-6xxiao-yu-602bu-an-quan-de-sessionid-fen-xi/">
+                  <h3 class="post-title">
+                    Thinkphp 6.x(小于6.0.2)不安全的sessionid分析
+                  </h3>
+                </a>
+              </div>
+            
+
+            
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="application/javascript">
+
+AOS.init();
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" >
+
+<title>Thinkphp 6.x(小于6.0.2)不安全的sessionid分析 | chriskali&#39;s blog</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1592112345647">
+<link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
+
+
+
+<link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+
+
+    <meta name="description" content="前言
+2020-01-10，thinkphp的github上更新了一处对sessionid检查的一处隐患
+
+更新代码段如下
+
+其中增加了对参数$id的校验，ctype_alnum函数判断参数是否为字母或数字的组合
+分析
+在src-&gt;t..." />
+    <meta name="keywords" content="" />
+  </head>
+  <body>
+    <div id="app" class="main">
+
+      <div class="sidebar" :class="{ 'full-height': menuVisible }">
+  <div class="top-container" data-aos="fade-right">
+    <div class="top-header-container">
+      <a class="site-title-container" href="https://chriskalix.github.io">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1592112345647" class="site-logo">
+        <h1 class="site-title">chriskali&#39;s blog</h1>
+      </a>
+      <div class="menu-btn" @click="menuVisible = !menuVisible">
+        <div class="line"></div>
+      </div>
+    </div>
+    <div>
+      
+        
+          <a href="/" class="site-nav">
+            首页
+          </a>
+        
+      
+        
+          <a href="/archives" class="site-nav">
+            归档
+          </a>
+        
+      
+        
+          <a href="/tags" class="site-nav">
+            标签
+          </a>
+        
+      
+        
+          <a href="/post/about" class="site-nav">
+            关于
+          </a>
+        
+      
+    </div>
+  </div>
+  <div class="bottom-container" data-aos="flip-up" data-aos-offset="0">
+    <div class="social-container">
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    </div>
+    <div class="site-description">
+      Keep learning
+    </div>
+    <div class="site-footer">
+      chriskalix | <a class="rss" href="https://chriskalix.github.io/atom.xml" target="_blank">RSS</a>
+    </div>
+  </div>
+</div>
+
+
+      <div class="main-container">
+        <div class="content-container" data-aos="fade-up">
+          <div class="post-detail">
+            <h2 class="post-title">Thinkphp 6.x(小于6.0.2)不安全的sessionid分析</h2>
+            <div class="post-date">2020-06-14</div>
+            
+            <div class="post-content" v-pre>
+              <h2 id="前言">前言</h2>
+<p>2020-01-10，thinkphp的github上更新了一处对sessionid检查的一处隐患<br>
+<img src="https://chriskalix.github.io/post-images/1592107642955.png" alt="" loading="lazy"><br>
+更新代码段如下<br>
+<img src="https://chriskalix.github.io/post-images/1592107658091.png" alt="" loading="lazy"><br>
+其中增加了对参数<code>$id</code>的校验，<code>ctype_alnum</code>函数判断参数是否为字母或数字的组合</p>
+<h2 id="分析">分析</h2>
+<p>在<code>src-&gt;think-&gt;session-&gt;Store.php</code>中</p>
+<pre><code class="language-php">public function setId($id = null): void
+{
+    $this-&gt;id = is_string($id) &amp;&amp; strlen($id) === 32 ? $id : md5(microtime(true) . session_create_id());
+}
+</code></pre>
+<p>找到Store.php中调用,找到save这个函数</p>
+<pre><code class="language-php">public function save(): void
+{
+    $this-&gt;clearFlashData();
+
+    $sessionId = $this-&gt;getId();
+
+    if (!empty($this-&gt;data)) {
+        $data = $this-&gt;serialize($this-&gt;data);
+
+        $this-&gt;handler-&gt;write($sessionId, $data);
+    } else {
+        $this-&gt;handler-&gt;delete($sessionId);
+    }
+    $this-&gt;init = false;
+}
+</code></pre>
+<p>具体传入<code>$this-&gt;handler-&gt;write()</code>，继续跟踪<code>handler</code>，发现在<code>__construct</code>中被初始化<br>
+全局搜索一下，看哪些接口<code>implement</code>了这个<code>SessionHandlerInterface</code><br>
+<img src="https://chriskalix.github.io/post-images/1592107766466.png" alt="" loading="lazy"><br>
+在<code>cache.php</code>和<code>file.php</code>中发现调用，由于<code>cache</code>中没有敏感操作的样子，直接看<code>file.php</code>,找到<code>write</code></p>
+<pre><code class="language-php">public function write(string $sessID, string $sessData): bool
+{
+    $filename = $this-&gt;getFileName($sessID, true);
+    $data     = $sessData;
+    if ($this-&gt;config['data_compress'] &amp;&amp; function_exists('gzcompress')) {
+        //数据压缩
+        $data = gzcompress($data, 3);
+    }
+    return $this-&gt;writeFile($filename, $data);
+}
+其中writeFile
+protected function writeFile($path, $content): bool
+{
+    return (bool) file_put_contents($path, $content, LOCK_EX);
+}
+</code></pre>
+<p>$sessID是可控的，那么看一下<code>getFileName</code>函数</p>
+<pre><code class="language-php">protected function getFileName(string $name, bool $auto = false): string
+{
+    if ($this-&gt;config['prefix']) {
+        // 使用子目录
+        $name = $this-&gt;config['prefix'] . DIRECTORY_SEPARATOR . 'sess_' . $name;
+    } else {
+        $name = 'sess_' . $name;
+    }
+    $filename = $this-&gt;config['path'] . $name;
+    $dir      = dirname($filename);
+    if ($auto &amp;&amp; !is_dir($dir)) {
+        try {
+            mkdir($dir, 0755, true);
+        } catch (\Exception $e) {
+            // 创建失败
+        }
+    }
+    return $filename;
+}
+</code></pre>
+<p>可以看到是直接拼接的，没有任何过滤方法，便直接调用file_put_contents了<br>
+现在从SetId往上，查找SetId的调用，通过全局搜索找到src-&gt;think-&gt;middleware的59行</p>
+<pre><code class="language-php">public function handle($request, Closure $next)
+{
+    // Session初始化
+    $varSessionId = $this-&gt;app-&gt;config-&gt;get('session.var_session_id');
+    $cookieName   = $this-&gt;session-&gt;getName();
+    if ($varSessionId &amp;&amp; $request-&gt;request($varSessionId)) {
+        $sessionId = $request-&gt;request($varSessionId);
+    } else {
+        $sessionId = $request-&gt;cookie($cookieName);
+    }
+    if ($sessionId) {
+        $this-&gt;session-&gt;setId($sessionId);
+    }
+    $this-&gt;session-&gt;init();
+    $request-&gt;withSession($this-&gt;session);
+    /** @var Response $response */
+    $response = $next($request);
+    $response-&gt;setSession($this-&gt;session);
+    $this-&gt;app-&gt;cookie-&gt;set($cookieName, $this-&gt;session-&gt;getId());
+    return $response;
+}
+</code></pre>
+<p>首先看初始化，<span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>v</mi><mi>a</mi><mi>r</mi><mi>S</mi><mi>e</mi><mi>s</mi><mi>s</mi><mi>i</mi><mi>o</mi><mi>n</mi><mi>I</mi><mi>d</mi><mi mathvariant="normal">由</mi><mi mathvariant="normal">于</mi><mi>s</mi><mi>e</mi><mi>s</mi><mi>s</mi><mi>i</mi><mi>o</mi><mi>n</mi><mi mathvariant="normal">.</mi><mi>v</mi><mi>a</mi><msub><mi>r</mi><mi>s</mi></msub><mi>e</mi><mi>s</mi><mi>s</mi><mi>i</mi><mi>o</mi><msub><mi>n</mi><mi>i</mi></msub><mi>d</mi><mi mathvariant="normal">没</mi><mi mathvariant="normal">找</mi><mi mathvariant="normal">到</mi><mi mathvariant="normal">，</mi><mi mathvariant="normal">默</mi><mi mathvariant="normal">认</mi><mi mathvariant="normal">为</mi><mi mathvariant="normal">空</mi><mi mathvariant="normal">值</mi><mi mathvariant="normal">。</mi></mrow><annotation encoding="application/x-tex">varSessionId由于session.var_session_id没找到，默认为空值。</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.84444em;vertical-align:-0.15em;"></span><span class="mord mathdefault" style="margin-right:0.03588em;">v</span><span class="mord mathdefault">a</span><span class="mord mathdefault" style="margin-right:0.02778em;">r</span><span class="mord mathdefault" style="margin-right:0.05764em;">S</span><span class="mord mathdefault">e</span><span class="mord mathdefault">s</span><span class="mord mathdefault">s</span><span class="mord mathdefault">i</span><span class="mord mathdefault">o</span><span class="mord mathdefault">n</span><span class="mord mathdefault" style="margin-right:0.07847em;">I</span><span class="mord mathdefault">d</span><span class="mord cjk_fallback">由</span><span class="mord cjk_fallback">于</span><span class="mord mathdefault">s</span><span class="mord mathdefault">e</span><span class="mord mathdefault">s</span><span class="mord mathdefault">s</span><span class="mord mathdefault">i</span><span class="mord mathdefault">o</span><span class="mord mathdefault">n</span><span class="mord">.</span><span class="mord mathdefault" style="margin-right:0.03588em;">v</span><span class="mord mathdefault">a</span><span class="mord"><span class="mord mathdefault" style="margin-right:0.02778em;">r</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.151392em;"><span style="top:-2.5500000000000003em;margin-left:-0.02778em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">s</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathdefault">e</span><span class="mord mathdefault">s</span><span class="mord mathdefault">s</span><span class="mord mathdefault">i</span><span class="mord mathdefault">o</span><span class="mord"><span class="mord mathdefault">n</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.31166399999999994em;"><span style="top:-2.5500000000000003em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathdefault">d</span><span class="mord cjk_fallback">没</span><span class="mord cjk_fallback">找</span><span class="mord cjk_fallback">到</span><span class="mord cjk_fallback">，</span><span class="mord cjk_fallback">默</span><span class="mord cjk_fallback">认</span><span class="mord cjk_fallback">为</span><span class="mord cjk_fallback">空</span><span class="mord cjk_fallback">值</span><span class="mord cjk_fallback">。</span></span></span></span>cookieName中调用了session-&gt;getname();session的类型为Session。跟进找到src-&gt;think-&gt;session-&gt;Store.php下有getName函数，默认值为PHPSESSID<br>
+到这里$sessionId就走向了else分支，因此可控变量就是Cookie中的PHPSESSID</p>
+<h2 id="漏洞的发生">漏洞的发生</h2>
+<p>根据同事博客中的文章快速起了一个环境。在app/controller/index.php中写一个函数，将传入的变量写入session中，那么就会存在被getshell的风险<br>
+因为目前session可控，但是默认session路径在/runtime/session下，且有一个sess_的前缀。然鹅尝试/../../是可以穿越路径的，那么危害就扩大为文件覆盖<br>
+如果开发时导致session中的某一参数可控，如下所示：</p>
+<pre><code class="language-php">public function mytest()
+{
+    $username = $_GET['name'];
+    Session::set('username',$username);
+    return 'success';
+}
+</code></pre>
+<p>那么就有可能存在被getshell的风险</p>
+<h2 id="总结与危害">总结与危害</h2>
+<ol>
+<li>危害范围在thinkphp 6.x且小于6.0.2</li>
+<li>默认的危害就是任意文件上传，可能造成文件覆盖</li>
+<li>在开发不当所导致的情况下(及session中内容用户可控)，那么可能导致getshell</li>
+</ol>
+<p>验证方法：<br>
+将PHPSESSID改为<code>/../../../public/././././123.php</code>，如果访问123.php成果则证明漏洞存在</p>
+<p>6.0.2中的修复：<br>
+直接加上ctype_alnum了，只能是数字或者字母，就不会出现这样的问题</p>
+<h2 id="参考文章">参考文章</h2>
+<p>https://blog.csdn.net/q851579181q/article/details/104344999<br>
+https://xz.aliyun.com/t/7109</p>
+
+            </div>
+            
+            
+
+            
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="application/javascript">
+
+AOS.init();
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+
+
+  </body>
+</html>

