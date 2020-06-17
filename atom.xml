@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-06-17T16:15:23.449Z</updated>
+    <updated>2020-06-17T16:20:38.346Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -32,7 +32,7 @@
 <p>LM Hash的产生：<br>
 小写转大写 -&gt; 转化为16进制分成2组，填充为14个字符 -&gt; 分成两组7字节的块 -&gt; 每组转化为比特流，不足56Bit在左边加0 -&gt; 将比特流按7比特一组，分出8组，末尾加0</p>
 <h3 id="本地认证流程图">本地认证流程图</h3>
-<img src="D:\个人学习\内网渗透\知识整理\imgs\windows本地认证流程.png" alt="image text" style="zoom: 33%;" />
+<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1592410797128.png" alt="" loading="lazy"></figure>
 <h2 id="2-windows网络认证-中间人攻击还没搞懂">2. Windows网络认证 - 中间人攻击还没搞懂</h2>
 <p>常见服务： SMB服务（端口445）</p>
 <h3 id="ntlm协议">NTLM协议</h3>
@@ -52,7 +52,7 @@
 </li>
 </ol>
 <p>流程图：<br>
-<img src="D:\个人学习\内网渗透\知识整理\imgs\Challenge-Response.png" alt="image text" style="zoom: 33%;" /></p>
+<img src="https://chriskalix.github.io/post-images/1592410807643.png" alt="" loading="lazy"></p>
 <h3 id="ntlm-v2协议">NTLM v2协议</h3>
 <p>区别点：</p>
 <ul>
@@ -101,7 +101,7 @@ kb2871997：<br>
 <li>KDC(Key Distribution Centor) = DC</li>
 </ul>
 <h3 id="详细流程图">详细流程图</h3>
-<img src="D:\个人学习\内网渗透\知识整理\imgs\Kerberos.png" alt="image text" style="zoom:80%;" />
+<figure data-type="image" tabindex="2"><img src="https://chriskalix.github.io/post-images/1592410833529.png" alt="" loading="lazy"></figure>
 <h2 id="5-pttpass-the-ticket攻击">5. PTT(Pass The Ticket)攻击</h2>
 <blockquote>
 <p>在了解完上述Kerberos后，这边自然地引申出PTT攻击（票据传递攻击）</p>

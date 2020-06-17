@@ -8,7 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
 <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
-<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1592410520719">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1592410836514">
 <link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
 
 
@@ -33,7 +33,7 @@ NTLM Hash (NT LAN ..." />
   <div class="top-container" data-aos="fade-right">
     <div class="top-header-container">
       <a class="site-title-container" href="https://chriskalix.github.io">
-        <img src="https://chriskalix.github.io/images/avatar.png?v=1592410520719" class="site-logo">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1592410836514" class="site-logo">
         <h1 class="site-title">chriskali&#39;s blog</h1>
       </a>
       <div class="menu-btn" @click="menuVisible = !menuVisible">
@@ -115,7 +115,7 @@ NTLM Hash (NT LAN ..." />
 <p>LM Hash的产生：<br>
 小写转大写 -&gt; 转化为16进制分成2组，填充为14个字符 -&gt; 分成两组7字节的块 -&gt; 每组转化为比特流，不足56Bit在左边加0 -&gt; 将比特流按7比特一组，分出8组，末尾加0</p>
 <h3 id="本地认证流程图">本地认证流程图</h3>
-<img src="D:\个人学习\内网渗透\知识整理\imgs\windows本地认证流程.png" alt="image text" style="zoom: 33%;" />
+<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1592410797128.png" alt="" loading="lazy"></figure>
 <h2 id="2-windows网络认证-中间人攻击还没搞懂">2. Windows网络认证 - 中间人攻击还没搞懂</h2>
 <p>常见服务： SMB服务（端口445）</p>
 <h3 id="ntlm协议">NTLM协议</h3>
@@ -135,7 +135,7 @@ NTLM Hash (NT LAN ..." />
 </li>
 </ol>
 <p>流程图：<br>
-<img src="D:\个人学习\内网渗透\知识整理\imgs\Challenge-Response.png" alt="image text" style="zoom: 33%;" /></p>
+<img src="https://chriskalix.github.io/post-images/1592410807643.png" alt="" loading="lazy"></p>
 <h3 id="ntlm-v2协议">NTLM v2协议</h3>
 <p>区别点：</p>
 <ul>
@@ -184,7 +184,7 @@ kb2871997：<br>
 <li>KDC(Key Distribution Centor) = DC</li>
 </ul>
 <h3 id="详细流程图">详细流程图</h3>
-<img src="D:\个人学习\内网渗透\知识整理\imgs\Kerberos.png" alt="image text" style="zoom:80%;" />
+<figure data-type="image" tabindex="2"><img src="https://chriskalix.github.io/post-images/1592410833529.png" alt="" loading="lazy"></figure>
 <h2 id="5-pttpass-the-ticket攻击">5. PTT(Pass The Ticket)攻击</h2>
 <blockquote>
 <p>在了解完上述Kerberos后，这边自然地引申出PTT攻击（票据传递攻击）</p>
