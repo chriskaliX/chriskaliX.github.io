@@ -8,7 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
 <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
-<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1592410836514">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1592446105412">
 <link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
 
 
@@ -33,7 +33,7 @@ NTLM Hash (NT LAN ..." />
   <div class="top-container" data-aos="fade-right">
     <div class="top-header-container">
       <a class="site-title-container" href="https://chriskalix.github.io">
-        <img src="https://chriskalix.github.io/images/avatar.png?v=1592410836514" class="site-logo">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1592446105412" class="site-logo">
         <h1 class="site-title">chriskali&#39;s blog</h1>
       </a>
       <div class="menu-btn" @click="menuVisible = !menuVisible">
@@ -144,7 +144,7 @@ NTLM Hash (NT LAN ..." />
 <li>v1加密算法是Des，v2是HMAC-MD5</li>
 </ul>
 <p><strong>工具</strong>：<br>
-Responder | smbexec | Inveigh</p>
+<code>Responder</code> | <code>smbexec</code> | <code>Inveigh</code></p>
 <h2 id="3-pthpass-the-hash哈希传递">3. <strong>PTH</strong>(Pass the hash)哈希传递</h2>
 <blockquote>
 <p>内网渗透中，经常需要抓取管理员密码，NTLM Hash，尤其是在域环境下，能帮助我们扩大战果</p>
@@ -164,15 +164,17 @@ Responder | smbexec | Inveigh</p>
 <p>问：为什么需要用户名?<br>
 答：NTLM协议需要用户名，服务端需要用户名然后去读取</p>
 <h3 id="工具">工具</h3>
-<p>Smbmap | CrackMapExec |  Smbexec | Metasploit</p>
+<p><code>Smbmap</code> | <code>CrackMapExec</code> |  <code>Smbexec</code> | <code>Metasploit</code></p>
 <h3 id="相关问题">相关问题</h3>
 <p>如何使用 NTLMv1/v2（或者不常用的netNTLM）哈希进行传递哈希攻击？ @leesoh 坑人的问题，这些哈希都不能传递:&gt;</p>
 <h3 id="对应pth的手法问题">对应PTH的手法&amp;问题</h3>
-<p>对应手法：<br>
-LAPS<br>
-kb2871997：<br>
-内容 : 禁止本地管理员账户用于远程连接，这样就无法以本地管理员用户的权限执行wmi、PSEXEC、schtasks、at和访问文件共享<br>
-这个补丁发布后常规的Pass The Hash已经无法成功，唯独默认的 Administrator (SID 500)账号例外，利用这个账号仍可以进行Pass The Hash远程连接</p>
+<p>对应手法：</p>
+<pre><code>LAPS
+</code></pre>
+<p>kb2871997：</p>
+<pre><code>内容 : 禁止本地管理员账户用于远程连接，这样就无法以本地管理员用户的权限执行wmi、PSEXEC、schtasks、at和访问文件共享
+这个补丁发布后常规的Pass The Hash已经无法成功，唯独默认的 Administrator (SID 500)账号例外，利用这个账号仍可以进行Pass The Hash远程连接
+</code></pre>
 <h2 id="4-kerberos认证机制非常重点">4. <strong>Kerberos认证机制</strong>(非常重点)</h2>
 <blockquote>
 <p>Kerberos是一种网络认证协议，不基于主机安全</p>
