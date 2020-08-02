@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-07-26T10:23:05.882Z</updated>
+    <updated>2020-08-02T15:51:34.016Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -1318,6 +1318,11 @@ namespace Symfony\Component\Routing{
         <content type="html"><![CDATA[<blockquote>
 <p>写<code>Golang</code>踩了一些坑，大部分的坑都是比较睿智的。因为不想看视频文档之类的，基础语法学了就上路了，有点磕磕绊绊，记录一下踩到的坑，防止反复地踩。总之，不断更新记录吧。</p>
 </blockquote>
+<h2 id="gin框架">Gin框架</h2>
+<blockquote>
+<p>由于开始都说抄的，所以如果正经的跟一遍下来是不会有问题的...</p>
+</blockquote>
+<p>c.Next()和c.Abort()，这两个只在Middleware里用，涉及到Handler调用，明天找个文章填上</p>
 <h2 id="变量申明以及作用域">变量申明以及作用域</h2>
 <blockquote>
 <p>起因，写了一个channel，明明是非阻塞的啊，结果阻塞了，具体如下</p>

@@ -8,7 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
 <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
-<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1595758982603">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1596383484559">
 <link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
 
 
@@ -21,9 +21,9 @@
     <meta name="description" content="
 写Golang踩了一些坑，大部分的坑都是比较睿智的。因为不想看视频文档之类的，基础语法学了就上路了，有点磕磕绊绊，记录一下踩到的坑，防止反复地踩。总之，不断更新记录吧。
 
-变量申明以及作用域
+Gin框架
 
-起因，写了一个channel，明明是非阻塞的..." />
+由于开始都说抄的，所以如果正经的跟一遍下来是不会有问..." />
     <meta name="keywords" content="" />
   </head>
   <body>
@@ -33,7 +33,7 @@
   <div class="top-container" data-aos="fade-right">
     <div class="top-header-container">
       <a class="site-title-container" href="https://chriskalix.github.io">
-        <img src="https://chriskalix.github.io/images/avatar.png?v=1595758982603" class="site-logo">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1596383484559" class="site-logo">
         <h1 class="site-title">chriskali&#39;s blog</h1>
       </a>
       <div class="menu-btn" @click="menuVisible = !menuVisible">
@@ -102,6 +102,11 @@
               <blockquote>
 <p>写<code>Golang</code>踩了一些坑，大部分的坑都是比较睿智的。因为不想看视频文档之类的，基础语法学了就上路了，有点磕磕绊绊，记录一下踩到的坑，防止反复地踩。总之，不断更新记录吧。</p>
 </blockquote>
+<h2 id="gin框架">Gin框架</h2>
+<blockquote>
+<p>由于开始都说抄的，所以如果正经的跟一遍下来是不会有问题的...</p>
+</blockquote>
+<p>c.Next()和c.Abort()，这两个只在Middleware里用，涉及到Handler调用，明天找个文章填上</p>
 <h2 id="变量申明以及作用域">变量申明以及作用域</h2>
 <blockquote>
 <p>起因，写了一个channel，明明是非阻塞的啊，结果阻塞了，具体如下</p>
