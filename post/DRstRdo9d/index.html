@@ -8,7 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
 <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
-<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1596383484559">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1596421366788">
 <link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
 
 
@@ -33,7 +33,7 @@ Gin框架
   <div class="top-container" data-aos="fade-right">
     <div class="top-header-container">
       <a class="site-title-container" href="https://chriskalix.github.io">
-        <img src="https://chriskalix.github.io/images/avatar.png?v=1596383484559" class="site-logo">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1596421366788" class="site-logo">
         <h1 class="site-title">chriskali&#39;s blog</h1>
       </a>
       <div class="menu-btn" @click="menuVisible = !menuVisible">
@@ -127,6 +127,18 @@ func b() {
 </code></pre>
 <p>当时那叫一个纳闷，想不明白为什么<code>ipch &lt;- &quot;test&quot;</code>就阻塞了，没办法把chan写到a函数内部去，然后当参数传给b（也不是不行）。还是纳闷，于是去搜一下，发现有人踩过坑了（<a href="https://www.cnblogs.com/sevenyuan/p/4544434.html">文章</a>）。<br>
 其实就是变量和作用域的问题，用 := 相当于另外申明，去了<code>:</code> 就行了 （...原来这么睿智）</p>
+<p>还有一个情况，有点坑了<br>
+比如我在外面定义了数据库</p>
+<p>var db *sql.DB</p>
+<p>同时有个init函数</p>
+<pre><code class="language-go">func init {
+    db, err := sql.Open(xxx)
+    if err!=nil {
+        xxxx
+    }
+}
+</code></pre>
+<p>这时候其实db被申明成了内部变量，我的解决方法就是，var err error，然后在申明处就用<code>db,err = sql.Open(xxx)</code>，坑啊....</p>
 <h2 id="动态调用">动态调用</h2>
 <p>一直以为应该能有一个类似于<code>php</code>中<code>call_user_func</code>的函数，直接根据函数名调用。昨晚(20200621)看到了凌晨2点，在<code>stackoverflow</code>上找到一个老兄的回答，说是只能自定一个map，然后用reflect函数做个动态调用的。哭了，我以为只能直接的。</p>
 <h2 id="不知名小坑集合">不知名小坑集合</h2>
