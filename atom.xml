@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-08-03T02:22:49.281Z</updated>
+    <updated>2020-08-04T08:34:29.796Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -1355,6 +1355,12 @@ func b() {
 }
 </code></pre>
 <p>这时候其实db被申明成了内部变量，我的解决方法就是，var err error，然后在申明处就用<code>db,err = sql.Open(xxx)</code>，坑啊....</p>
+<h2 id="并发不安全的map">并发不安全的map</h2>
+<p>这个不是什么新鲜的了，只是碰到了解决一下。首先golang中的map是并发不安全的，我遇到的情况是开启了一个goroutine在操作map，但是下面其实已经不需要使用goroutine了（有点绕，其实就是goroutine可以关闭了），我的解决方法有两种</p>
+<ul>
+<li>给map加锁，使用sync.Map</li>
+<li>退出goroutine，用channel或者ctx，我用ctx解决（不过还有一个小坑，我先去解决了</li>
+</ul>
 <h2 id="动态调用">动态调用</h2>
 <p>一直以为应该能有一个类似于<code>php</code>中<code>call_user_func</code>的函数，直接根据函数名调用。昨晚(20200621)看到了凌晨2点，在<code>stackoverflow</code>上找到一个老兄的回答，说是只能自定一个map，然后用reflect函数做个动态调用的。哭了，我以为只能直接的。</p>
 <h2 id="不知名小坑集合">不知名小坑集合</h2>
