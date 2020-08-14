@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" >
+
+<title>dedecms老洞分析之 - CVE-2018-7700 | chriskali&#39;s blog</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1597391532374">
+<link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
+
+
+
+<link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+
+
+    <meta name="description" content="
+dedecms是比较经典的cms。当我第一次打开它的源码的时候我有点震惊(一个目录下好多PHP
+
+
+回归正题，下面开始分析
+代码层面漏洞分析
+
+该漏洞为后台RCE，所以先登录后台进行后续操作
+
+漏洞入口点
+入口点在 tag_test_ac..." />
+    <meta name="keywords" content="" />
+  </head>
+  <body>
+    <div id="app" class="main">
+
+      <div class="sidebar" :class="{ 'full-height': menuVisible }">
+  <div class="top-container" data-aos="fade-right">
+    <div class="top-header-container">
+      <a class="site-title-container" href="https://chriskalix.github.io">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1597391532374" class="site-logo">
+        <h1 class="site-title">chriskali&#39;s blog</h1>
+      </a>
+      <div class="menu-btn" @click="menuVisible = !menuVisible">
+        <div class="line"></div>
+      </div>
+    </div>
+    <div>
+      
+        
+          <a href="/" class="site-nav">
+            首页
+          </a>
+        
+      
+        
+          <a href="/archives" class="site-nav">
+            归档
+          </a>
+        
+      
+        
+          <a href="/tags" class="site-nav">
+            标签
+          </a>
+        
+      
+        
+          <a href="/post/about" class="site-nav">
+            关于
+          </a>
+        
+      
+    </div>
+  </div>
+  <div class="bottom-container" data-aos="flip-up" data-aos-offset="0">
+    <div class="social-container">
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    </div>
+    <div class="site-description">
+      Keep learning
+    </div>
+    <div class="site-footer">
+      chriskalix | <a class="rss" href="https://chriskalix.github.io/atom.xml" target="_blank">RSS</a>
+    </div>
+  </div>
+</div>
+
+
+      <div class="main-container">
+        <div class="content-container" data-aos="fade-up">
+          <div class="post-detail">
+            <h2 class="post-title">dedecms老洞分析之 - CVE-2018-7700</h2>
+            <div class="post-date">2020-08-14</div>
+            
+            <div class="post-content" v-pre>
+              <blockquote>
+<p>dedecms是比较经典的cms。当我第一次打开它的源码的时候我有点震惊(一个目录下好多PHP<br>
+<img src="https://chriskalix.github.io/post-images/1597391332229.png" alt="" loading="lazy"></p>
+</blockquote>
+<p>回归正题，下面开始分析</p>
+<h2 id="代码层面漏洞分析">代码层面漏洞分析</h2>
+<blockquote>
+<p>该漏洞为后台RCE，所以先登录后台进行后续操作</p>
+</blockquote>
+<h2 id="漏洞入口点">漏洞入口点</h2>
+<p>入口点在 <code>tag_test_action.php</code> 函数中</p>
+<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1597391385755.png" alt="" loading="lazy"></figure>
+<p>这里有个预判断，就是 <code>csrf_check()</code> ，跟进这个函数，在 <code>config.php</code></p>
+<figure data-type="image" tabindex="2"><img src="https://chriskalix.github.io/post-images/1597391393119.png" alt="" loading="lazy"></figure>
+<p>global <span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>t</mi><mi>o</mi><mi>k</mi><mi>e</mi><mi>n</mi><mi mathvariant="normal">是</mi><mi mathvariant="normal">直</mi><mi mathvariant="normal">接</mi><mi mathvariant="normal">从</mi></mrow><annotation encoding="application/x-tex">token是直接从</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.69444em;vertical-align:0em;"></span><span class="mord mathdefault">t</span><span class="mord mathdefault">o</span><span class="mord mathdefault" style="margin-right:0.03148em;">k</span><span class="mord mathdefault">e</span><span class="mord mathdefault">n</span><span class="mord cjk_fallback">是</span><span class="mord cjk_fallback">直</span><span class="mord cjk_fallback">接</span><span class="mord cjk_fallback">从</span></span></span></span>GLOBALS里面取值，那么只要传递token参数即可。因为<code>$_SESSION['token']</code>是不存在的，为NULL，即只要传入 <code>?token=</code> 即可绕过该判断</p>
+<h2 id="漏洞长链">漏洞长链</h2>
+<p>绕过之后继续跟进tag_test_action.php，new了一个对象，所以预先调用 <code>__construct</code></p>
+<figure data-type="image" tabindex="3"><img src="https://chriskalix.github.io/post-images/1597391398578.png" alt="" loading="lazy"></figure>
+<p>走到<code>setTemplet</code> 函数跟进（在<code>arc.partview.class</code>中</p>
+<figure data-type="image" tabindex="4"><img src="https://chriskalix.github.io/post-images/1597391404105.png" alt="" loading="lazy"></figure>
+<p>所以 <code>$this-&gt;dtp-&gt;LoadSource()</code> 即调用 <code>DedeTagParse</code> 里的 <code>LoadSource</code> 方法</p>
+<figure data-type="image" tabindex="5"><img src="https://chriskalix.github.io/post-images/1597391408624.png" alt="" loading="lazy"></figure>
+<p>文件写入后调用 <code>LoadTemplate</code> 方法，继续跟进</p>
+<figure data-type="image" tabindex="6"><img src="https://chriskalix.github.io/post-images/1597391412119.png" alt="" loading="lazy"></figure>
+<p>跟进else，while部分为文件读取，跟进下面部分的 <code>LoadCache</code>， 截取部分关键</p>
+<figure data-type="image" tabindex="7"><img src="https://chriskalix.github.io/post-images/1597391416214.png" alt="" loading="lazy"></figure>
+<p>最后回到起初的<code>tag_test_action.php</code>，调用 <code>Display()</code>，继续跟进display</p>
+<figure data-type="image" tabindex="8"><img src="https://chriskalix.github.io/post-images/1597391420423.png" alt="" loading="lazy"></figure>
+<figure data-type="image" tabindex="9"><img src="https://chriskalix.github.io/post-images/1597391425587.png" alt="" loading="lazy"></figure>
+<figure data-type="image" tabindex="10"><img src="https://chriskalix.github.io/post-images/1597391429782.png" alt="" loading="lazy"></figure>
+<p>调用AssignSysTag()，继续跟进，剔除前面读取和循环部分</p>
+<figure data-type="image" tabindex="11"><img src="https://chriskalix.github.io/post-images/1597391437221.png" alt="" loading="lazy"></figure>
+<h2 id="漏洞触发点">漏洞触发点</h2>
+<p>跟到最后执行函数的RunPHP，很经典的一个<code>@eval</code></p>
+<figure data-type="image" tabindex="12"><img src="https://chriskalix.github.io/post-images/1597391441512.png" alt="" loading="lazy"></figure>
+<h2 id="整体逻辑图">整体逻辑图</h2>
+<figure data-type="image" tabindex="13"><img src="https://chriskalix.github.io/post-images/1597391448530.jpg" alt="" loading="lazy"></figure>
+<h2 id="exp">EXP</h2>
+<p>先知上给的EXP是<br>
+<a href="http://localhost/%E5%90%8E%E5%8F%B0%E5%9C%B0%E5%9D%80/tag_test_action.php?url=a&amp;token=&amp;partcode=%7Bdede:field">url=a&amp;token=&amp;partcode={dede:field</a> name='source' runphp='yes'}phpinfo();{/dede:field}，<br>
+但是跟下来没发现用到url参数，其实不用也可以。</p>
+<p>跟图中标记的一样，<code>token=</code>，其中partcode要符合dedecms的模板风格，即{dede:file}{/dede:field}，为了走入Runphp分支，要添加runphp='yes'；所以分析完毕后，参数就比作者简单一点<br>
+<code>?token=&amp;partcode{dede:filed runphp='yes'}system(whoami);{/dede:field}</code> 即可</p>
+<p>结果如下</p>
+<figure data-type="image" tabindex="14"><img src="https://chriskalix.github.io/post-images/1597391454531.png" alt="" loading="lazy"></figure>
+<h1 id="后续思考">后续思考</h1>
+<p>没挖过dedecms的漏洞，但是针对这种类型的cms，猜测挖掘者的手法可能为2种。</p>
+<ol>
+<li>从危险函数eval作为触发点进行回溯。其实在很多的cms中也会有这种问题，就是用在模板渲染中使用eval执行代码，在我审计过的为数不多的cms中，大概有3个都是这种类型触发的。</li>
+<li>从功能出发，这个其实就是后台的模板功能，跟上面所述，模板渲染等功能是高发区（RCE高发区）。不过前台用户一般没有权限更改，只有后台用户可以，所以一般情况下，都是后台RCE居多</li>
+</ol>
+
+            </div>
+            
+            
+              <div class="next-post">
+                <div class="next">下一篇</div>
+                <a href="https://chriskalix.github.io/post/GqcqeDkXU/">
+                  <h3 class="post-title">
+                    disable_functions bypass整理
+                  </h3>
+                </a>
+              </div>
+            
+
+            
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="application/javascript">
+
+AOS.init();
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+
+
+  </body>
+</html>
