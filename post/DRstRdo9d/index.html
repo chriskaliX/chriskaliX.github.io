@@ -8,7 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
 <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
-<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1598579019313">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1598925599750">
 <link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
 
 
@@ -33,7 +33,7 @@ Gin框架
   <div class="top-container" data-aos="fade-right">
     <div class="top-header-container">
       <a class="site-title-container" href="https://chriskalix.github.io">
-        <img src="https://chriskalix.github.io/images/avatar.png?v=1598579019313" class="site-logo">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1598925599750" class="site-logo">
         <h1 class="site-title">chriskali&#39;s blog</h1>
       </a>
       <div class="menu-btn" @click="menuVisible = !menuVisible">
@@ -154,6 +154,9 @@ func b() {
 </li>
 <li>
 <p>循环发送udp，发到1000个左右的时候就报错 <code>bad file description</code>，<code>fd</code>相关的错误。看了一下<code>ulimit</code>的都没什么问题。查阅后发现，是因为我写的时候调用了<code>syscall.send</code>，打开了<code>fd</code>，但是没有调用<code>syscall.Close(fd)</code>导致堆积阻塞，出现这一问题的原因是我以为函数return后，应该会自动回收<code>fd</code>，然而事实不是这样的（这个应该算是<code>Linux</code>编程问题吧）</p>
+</li>
+<li>
+<p>交叉编译的时候CGO_ENABLED开启，不然报错 ..exclude</p>
 </li>
 </ol>
 
