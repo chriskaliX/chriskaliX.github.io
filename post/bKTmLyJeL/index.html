@@ -8,7 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
 <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
-<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1601396120298">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1601396909889">
 <link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
 
 
@@ -18,7 +18,9 @@
 
 
 
-    <meta name="description" content="
+    <meta name="description" content="记一次手工钓鱼
+
+记得去年差不多也是这个时候，和同事配合了一次钓鱼，最后因为payload有些错误加上他的离职，这个事情也就匆匆告一段落了（说起来还有点怀念并肩作战的日子）。如今又有了钓鱼的需求，于是记录一下这次从外网打点开始的钓鱼之旅。
 ..." />
     <meta name="keywords" content="" />
   </head>
@@ -29,7 +31,7 @@
   <div class="top-container" data-aos="fade-right">
     <div class="top-header-container">
       <a class="site-title-container" href="https://chriskalix.github.io">
-        <img src="https://chriskalix.github.io/images/avatar.png?v=1601396120298" class="site-logo">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1601396909889" class="site-logo">
         <h1 class="site-title">chriskali&#39;s blog</h1>
       </a>
       <div class="menu-btn" @click="menuVisible = !menuVisible">
@@ -95,7 +97,170 @@
             <div class="post-date">2020-09-30</div>
             
             <div class="post-content" v-pre>
-              <figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1601396117306.png" alt="" loading="lazy"></figure>
+              <h1 id="记一次手工钓鱼">记一次手工钓鱼</h1>
+<blockquote>
+<p>记得去年差不多也是这个时候，和同事配合了一次钓鱼，最后因为payload有些错误加上他的离职，这个事情也就匆匆告一段落了（说起来还有点怀念并肩作战的日子）。如今又有了钓鱼的需求，于是记录一下这次从外网打点开始的钓鱼之旅。</p>
+</blockquote>
+<h2 id="目标制定">目标制定</h2>
+<p>通过钓鱼手法，获取目标机器的敏感权限和身份信息。最后有时间/精力的话，稍微坐下横向和驻留。</p>
+<h2 id="外网打点">外网打点</h2>
+<blockquote>
+<p>打点的目标非常明确，即为目标企业的mail网站以及邮箱信息</p>
+</blockquote>
+<h3 id="邮件用户名格式">邮件用户名格式</h3>
+<blockquote>
+<p>不能盲目冲锋，首先要获取到用户名的格式</p>
+</blockquote>
+<p>可以用现成的工具 theharvester，或者github等等等等。酒仙桥六号作战部队有个很好的<a href="https://mp.weixin.qq.com/s/07XwcNEJbLCaWUyhvGFFKw">文章</a>，里面有很多大范围搜集的姿势。<br>
+当然大范围搜集有时候是一件非常方便的事情，往往在初步的收集后即可进行投递，但是当前的目标并非如此。用工具我们得出了一个初步的结果<br>
+<img src="./format.png" alt="" loading="lazy"></p>
+<p>是用 <code>员工姓名拼音@xxx.com</code> 这样的格式</p>
+<h3 id="初步邮箱获取">初步邮箱获取</h3>
+<blockquote>
+<p>获取员工邮箱有许多地方，包括不限于泄露，爆破（smtps，web），其余后台信息等等，但是作为最快的方式，还是直接去找邮件系统</p>
+</blockquote>
+<p>由于前期的子域名搜集，很快发现该公司的邮件域名为 <code>mail.xxx.com</code>（太简单了）,访问后如下</p>
+<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1601396736035.png" alt="" loading="lazy"></figure>
+<p>熟悉的模板和ico，在哪里看过。一顿搜索，发现使用的 <code>roundcube</code> 进行搭建。匆忙地搜索历史漏洞，在 Github 上搜索web端的爆破，均无收获...此时心想，难道要自己写一个爆破脚本嘛。此时收到一位来自赛博空间的人事指点</p>
+<figure data-type="image" tabindex="2"><img src="https://chriskalix.github.io/post-images/1601396752138.png" alt="" loading="lazy"></figure>
+<p>......对噢，为什么老盯着web呢。确认不是CDN节点后，开心的开启nmap扫描</p>
+<figure data-type="image" tabindex="3"><img src="https://chriskalix.github.io/post-images/1601396765478.png" alt="" loading="lazy"></figure>
+<p>.......还真的开着，整挺好。爆破都是基本操作了，无非就是工具+字典。公司名就叫xxx吧，构造如下</p>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>字典</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hydra</td>
+<td>用户名字典：top中文名500@xxx.com<br />密码字典：xxx@2020,xxx@2019等等...</td>
+</tr>
+</tbody>
+</table>
+<p>字典部分手动构造，但是不宜太大，因为smtps爆破较为缓慢，一旦线程设置过多还存在 <code>timeout</code> ，所以就尽量小字典。启动的指令如下所示：</p>
+<p><code>hydra -q -L username.txt -P password.txt ip地址 smtps</code></p>
+<p>此时已经到中午了，吃个饭回来在看</p>
+<h3 id="邮箱信息">邮箱信息</h3>
+<blockquote>
+<p>这里都是普通操作，无非就是爆破和搜集</p>
+</blockquote>
+<p>吃完饭后回来查看，嚯，还真有一个。那么爆破就可以停止了，进去邮箱就能发现我们需要的东西，登录后点击联系人</p>
+<figure data-type="image" tabindex="4"><img src="https://chriskalix.github.io/post-images/1601396779841.png" alt="" loading="lazy"></figure>
+<p>在这就能找到所有用户的信息了</p>
+<figure data-type="image" tabindex="5"><img src="https://chriskalix.github.io/post-images/1601396785923.png" alt="" loading="lazy"></figure>
+<p>点击导出，获取到所有用户组的信息。同时不要忘记了稍微翻阅一下邮件，找到较为官方的发件人，如管理中心，人力中心，安全部门等等，同时导出模板作为后续钓鱼的准备。到目前为止，已有的信息为：</p>
+<ol>
+<li>该公司组织架构关系</li>
+<li>所有员工的邮箱以及姓名</li>
+<li>官方发送的历史邮件</li>
+<li>一个员工的账号密码</li>
+</ol>
+<p>当然，可以导出员工再进行爆破，获取更多的邮箱和信息，然而目前我认为信息已经足够，可以开始着手钓鱼。</p>
+<h2 id="载荷制作">载荷制作</h2>
+<blockquote>
+<p>这一步事实上非常关键，但是正如之前内网入门篇所提及到的，我对免杀这块还没有原理性的深入，所以还是惭愧的以使用工具为主</p>
+</blockquote>
+<h3 id="前置说明">前置说明</h3>
+<p>本次投递由 <code>BypassAV</code> 生成，但是本身 <code>cobaltstrike</code> 会有较多的特征，如默认的60秒回连等等，所以需要先选好 <code>malleable_c2.profile</code> 模板，一定程度修改特征。</p>
+<h3 id="免杀制作">免杀制作</h3>
+<p>这一部分其实花费了不少功夫，最初采用 CHM 的方式，参考的文章为 <a href="https://www.freebuf.com/articles/network/208897.html">Freebuf文章</a>。起初通过CHM远程下载，本地加载运行，但是这种拉跨的方式很快的被杀了。中间还做了 js 混淆等，但均于事无补... 这部分做的不好，后期我会重新复盘。<br>
+由于时间紧迫，没有太多时间让我学习免杀，匆忙之下找到了 Github 上的免杀项目 <a href="https://github.com/hack2fun/BypassAV">BypassAV</a>（当然还有著名的掩日，但是已经被杀的死死的了）</p>
+<figure data-type="image" tabindex="6"><img src="https://chriskalix.github.io/post-images/1601396798907.png" alt="" loading="lazy"></figure>
+<p>神奇的是这个项目时过两月，依然能过 <code>windows defender</code> ，但是比较单一，只能直接生成 exe 程序。但这并不影响我们进行投递，有个免杀的程序已经十分知足</p>
+<h3 id="增加迷惑性">增加迷惑性</h3>
+<blockquote>
+<p>单独的一个exe是非常让人困惑的，排除模板以外，exe本身也应该做一些特殊处理</p>
+</blockquote>
+<p>这里使用的工具为 <code>Resource Hacker</code> ，为exe添加一个 ico 。至于这个 ico 怎么来的，其实只要去该公司官网把 ico 扒下来即可。要注意一定是ico，如果是png需要格式转化为ico（改后缀行不通）</p>
+<figure data-type="image" tabindex="7"><img src="https://chriskalix.github.io/post-images/1601396810381.png" alt="" loading="lazy"></figure>
+<p>由于 exe 非常突兀，什么情况下用户会使用exe呢，于是我捏造的想法为让他们相信这是一个 <strong>内部安全工具</strong> ...那么就应该加个 UAC ，一是理所应当，二是增加权限，两全其美<br>
+但是问题来了，怎么添加呢...突然看到了自己桌面上的 phpstudy，突然灵光一闪</p>
+<figure data-type="image" tabindex="8"><img src="https://chriskalix.github.io/post-images/1601396816298.png" alt="" loading="lazy"></figure>
+<p>一顿搜索，发现只要修改 exe 中的 manifest，在里面申明需要administrator权限即可，于是直接扒下 phpstudy 的manifest，如下所示：</p>
+<pre><code class="language-xml">&lt;?xml version='1.0' encoding='UTF-8' standalone='yes'?&gt;
+&lt;assembly xmlns='urn:schemas-microsoft-com:asm.v1' manifestVersion='1.0'&gt;
+  &lt;trustInfo xmlns=&quot;urn:schemas-microsoft-com:asm.v3&quot;&gt;
+    &lt;security&gt;
+      &lt;requestedPrivileges&gt;
+        &lt;requestedExecutionLevel level='requireAdministrator' uiAccess='false' /&gt;
+      &lt;/requestedPrivileges&gt;
+    &lt;/security&gt;
+  &lt;/trustInfo&gt;
+&lt;/assembly&gt;
+</code></pre>
+<p>同样，在Resource Hacker里面进行操作</p>
+<figure data-type="image" tabindex="9"><img src="https://chriskalix.github.io/post-images/1601396825069.png" alt="" loading="lazy"></figure>
+<p>最后制作成功截图如下所示，双击后弹出大大的UAC，这里就不重复截图了，总之挺好使，加上了大盾牌，看起来也更加可靠了呢</p>
+<figure data-type="image" tabindex="10"><img src="https://chriskalix.github.io/post-images/1601396854180.png" alt="" loading="lazy"></figure>
+<p>当然了，这里其实还有一个小小的问题，就是这个 exe太小了，1M左右...觉得不太好的师傅可以自己想想办法把它搞大。<br>
+最后记得打包成zip，加上一个具有公司特征的密码，如xxx2020</p>
+<h3 id="模板制作">模板制作</h3>
+<blockquote>
+<p>这里要用到先前登录后拿到的官方模板</p>
+</blockquote>
+<p>一个好的钓鱼邮件，最关键的是做戏要全套，切勿偷懒。这一部分较为敏感，就不再详细截图了。总结一下我制作的过程：</p>
+<ol>
+<li>扣下官方邮件签名</li>
+<li>选定主题，本次选择网络安全查杀工具</li>
+<li>使用以前的模板（例如官方邮件的开头：大家好，或者同事好等等）</li>
+<li>用之前爆破的邮箱自己给自己发一封修改好的钓鱼邮件，保存下 <code>eml</code>格式</li>
+</ol>
+<p><strong>[*]</strong> 注：这里为什么要自己给自己发一封呢？因为之前尝试过将签名以图片形式附属在邮件下方，在 Outlook 看下是正常的，网页端和foxmail不正常显示，即 用拼凑的形式存在兼容性的问题。所以最佳的方式是从网页端登录后设置自己的签名为历史邮件中官方的签名，然后发给自己并且导出eml。</p>
+<h2 id="载荷投递">载荷投递</h2>
+<blockquote>
+<p>投递也是一个细心活</p>
+</blockquote>
+<h3 id="前置重点">前置重点</h3>
+<p>很多人发邮件都是批量群发，这其实有个问题。例如：我模仿xx部门发送邮件，一定要避免xx部门自身，因为这样会很快被发现。同样的大范围的投递也不是一个好的选择，这一定会引起同事们的讨论和怀疑，很快就会暴露。<br>
+由于之前已经获得了组织架构，我选择了对某一个部门进行专门投递，避免大范围<br>
+**[*]**重点：当然还有更详细的，在<a href="https://payloads.online/archivers/2020-02-05/1">倾旋</a>的博客里。包括SPF等等，由于博客年前清空，已经暂时找不到了，对于基础知识，大家可以在上面的博客中找到学习，这里更注重的是整个流程</p>
+<h3 id="批量投递">批量投递</h3>
+<p>同样由于时间紧急，没有太多的时间优雅的执行一整套流程，这里也是直接用swaks进行投递，指令如下</p>
+<pre><code class="language-bash">swaks --data &quot;之前保存的eml文件&quot; --h-from &quot;伪造邮件名&quot; --from xx@smtp2go --to &quot;投递对象&quot; --server mail.smtp2go.com -p 2525 -au username -ap password
+</code></pre>
+<p>这里更加详细的可以看倾旋的<a href="https://payloads.online/archivers/2019-05-09/1">这篇博客</a>，更加详细的解释了为什么要使用smtp2go等等<br>
+然后写个bash或者python在shell里执行就完事了</p>
+<h2 id="收杆成果">收杆成果</h2>
+<blockquote>
+<p>投递出时已经是若干天的中午，下午打开CS后，我们开心的开始收杆工作</p>
+</blockquote>
+<p>当然是先看一眼机器啦，投递的几十个目标，上线了6个（当然其实不止，后续陆续上线了很多）</p>
+<figure data-type="image" tabindex="11"><img src="https://chriskalix.github.io/post-images/1601396866456.png" alt="" loading="lazy"></figure>
+<h3 id="确认身份">确认身份</h3>
+<p>由于需要确认被钓人的身份，光有他的 computer name 肯定是不够的，我们需要翻阅文件找到个人信息。此时的思路有如下四个：</p>
+<ol>
+<li>找到微信相关信息</li>
+<li>抓取浏览器凭证，获取信息</li>
+<li>翻阅其他文件，如记录保存的word，excel等</li>
+<li>暂未学习到的<a href="http://blog.leanote.com/post/snowming/4e07af1cab60">雪姐 Brower Pivoting</a>，来直接查看邮箱，OA等</li>
+</ol>
+<p>首先没用过浏览器凭证工具的我忍不住尝试<a href="https://github.com/QAX-A-Team/BrowserGhost">BrowserGhost</a>，这款Ateam出品的浏览器密钥抓取工具。奈何奇奇怪怪的问题始终无法成功执行（本地机器上没有问题），遂暂时放弃</p>
+<p>于是重新尝试方法1，微信相关凭证<br>
+这个好办那，直接在 <code>C:\Users\你的用户名\Documents\WeChat Files\</code> 下就能看到相关文件了，由于目标机不便展示，我展示一下我的本机</p>
+<figure data-type="image" tabindex="12"><img src="https://chriskalix.github.io/post-images/1601396876009.png" alt="" loading="lazy"></figure>
+<p>然而得到的是一个wxid_xxxxxx，他不是一个直接可以添加的wx账号，这就头疼了。一番询问后 AK 师傅告诉我，这是可以找到对应关系的，需要生成二维码然后扫码。在搜索后，我发现了一个简单的网站 https://wxid.ltd/ ，输入 ID 即可生成二维码，扫描即可（iphone不行不知道为啥，只能安卓）<br>
+感兴趣的师傅可以在测试一下自己的</p>
+<h3 id="匆匆的横向">匆匆的横向</h3>
+<p>由于快要到下班的点了，而我又不想做驻留（因为本次目的是证明危害，不需要持久控制），明白下班后就会掉线，于是匆匆挂上代理，扫了一下C段。这里闹了个笑话，因为忘记看本地的杀软，不小心掉了两台机器hhh<br>
+发现xxx.xxx.xx.1上开了个WEB，一个弱口令进了AP管理后台，截图一下仅为证明，便开始写报告</p>
+<figure data-type="image" tabindex="13"><img src="https://chriskalix.github.io/post-images/1601396884034.png" alt="" loading="lazy"></figure>
+<p>其实还有很多设备，如打印机等，耐心的话可以从以下思路继续扩展</p>
+<ol>
+<li>驻留当前所有shell</li>
+<li>横向个人PC机，找关键数据，服务器信息等（有的会把账号密码以txt，doc的形式放在桌面）</li>
+<li>获取到的信息继续向服务器扩展，进一步扩大关键信息</li>
+</ol>
+<h2 id="最终总结">最终总结</h2>
+<p>本次钓鱼算是一次流程上比较完整的测试，但是仍发现了一些不足点</p>
+<ol>
+<li>过度依赖现成工具免杀，导致投递样本、免杀效果完全依赖工具本身，这一点需要慢慢学习后改进</li>
+<li>不够细心，在上线后匆忙扫描C段，导致触发本地杀软被拦截下线。这如果对于只有少量机器上线的情况，是非常大的损失</li>
+<li>横向思路不明确，一直向横向不知道在横啥，以后要想清楚，要控制关键的设备</li>
+<li>原理上的认知缺失，如邮件的SPF，免杀等，需要慢慢补充</li>
+</ol>
 
             </div>
             
