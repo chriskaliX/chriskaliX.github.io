@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-09-22T06:34:47.342Z</updated>
+    <updated>2020-09-29T16:15:26.089Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -10,6 +10,15 @@
     <logo>https://chriskalix.github.io/images/avatar.png</logo>
     <icon>https://chriskalix.github.io/favicon.ico</icon>
     <rights>All rights reserved 2020, chriskali&apos;s blog</rights>
+    <entry>
+        <title type="html"><![CDATA[记一次钓鱼测试]]></title>
+        <id>https://chriskalix.github.io/post/bKTmLyJeL/</id>
+        <link href="https://chriskalix.github.io/post/bKTmLyJeL/">
+        </link>
+        <updated>2020-09-29T16:13:11.000Z</updated>
+        <content type="html"><![CDATA[<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1601396117306.png" alt="" loading="lazy"></figure>
+]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hvv小记]]></title>
         <id>https://chriskalix.github.io/post/mvIL5VDju/</id>
@@ -1162,79 +1171,6 @@ cs中<br>
 <h2 id="参考文章">参考文章</h2>
 <p><a href="http://www.vuln.cn/6813">乌云文章</a><br>
 <a href="https://xz.aliyun.com/t/7051">先知文章</a></p>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[域渗透基础知识(一)-Windows认证]]></title>
-        <id>https://chriskalix.github.io/post/e3nr4E66U/</id>
-        <link href="https://chriskalix.github.io/post/e3nr4E66U/">
-        </link>
-        <updated>2020-06-26T08:14:38.000Z</updated>
-        <content type="html"><![CDATA[<blockquote>
-<p>主要包含本地认证，网络认证，域认证</p>
-</blockquote>
-<h2 id="windows本地认证">Windows本地认证</h2>
-<p>简述流程：当登录系统时候，用户的密码会被加密成NTLM Hash，再通过与SAM数据库中用户的哈希（<code>%SystemRoot%\system32\config\sam</code>）进行匹配从而完成校验。</p>
-<h3 id="认证流程">认证流程</h3>
-<p>简易图：<br>
-<img src="https://chriskalix.github.io/post-images/1593159324969.png" alt="" loading="lazy"></p>
-<p>提到的<strong>NTLM Hash</strong>，是一种单向哈希算法。顺便记一下，Windows中不以明文形式进行传输和存储。算法的流程如下：</p>
-<p><code>hex编码 -&gt; Unicode编码 -&gt; MD4</code></p>
-<p>简单地用py做个HASH：</p>
-<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1593159333529.png" alt="" loading="lazy"></figure>
-<blockquote>
-<p><code>NTLM Hash</code>的前身为<code>LM Hash</code>，存在于<code>Windows Server 2008</code>之前版本，由于安全性被淘汰</p>
-</blockquote>
-<p>经常我们听到用mimikatz抓密码这个操作，其实就是从<code>lsass.exe</code>这个进程中读取到的</p>
-<h3 id="抓取密码">抓取密码</h3>
-<blockquote>
-<p>这一过程需要system，毕竟访问的是<code>lsass.exe</code></p>
-</blockquote>
-<h4 id="用procdump-mimikatz">用Procdump + Mimikatz</h4>
-<p>mimikatz都听过，但是不做免杀就是冲锋兵，没落地就被吃了。那怎么办，可以用微软自带的<a href="https://docs.microsoft.com/en-us/sysinternals/downloads/procdump">Procdump</a>，命令如下：<br>
-<code>procdump64.exe -accepteula -ma lsass.exe lsass.dmp</code><br>
-然后再脱到本地，用<code>mimikatz</code>跑一下<br>
-<code>mimikatz.exe &quot;sekurlsa::minidump lsass.dmp&quot; &quot;sekurlsa::logonPasswords full&quot; exit</code></p>
-<h4 id="无工具直接抓取">无工具直接抓取</h4>
-<p>直接通过reg的save选项保存<br>
-<code>reg save hklm\sam sam.hive</code><br>
-<code>reg save hklm\system system.hive</code></p>
-<p>然后拖到本地，mimikatz跑<br>
-<code>lsadump::sam /sam:sam.hive /system:system.hive</code></p>
-<p>问题：为什么有时候看到能抓明文，有时候又是抓NTLM Hash？</p>
-<p>答案：默认Win10或者win server 2012r2以上的，禁止在内存中保存明文密码(WDigest策略)，所以有时候需要明文密码的时候，就需要Hook winlogon程序，然后开启WDigest等待对方登录。</p>
-<h2 id="windows网络认证">Windows网络认证</h2>
-<p>工作组环境下远程登录另外一台设备所采用的认证机制。常见的如SMB</p>
-<h3 id="ntlm协议">NTLM协议</h3>
-<p>分为三步骤</p>
-<ol>
-<li>协商</li>
-<li>质询</li>
-<li>验证</li>
-</ol>
-<h4 id="1-协商">1. 协商</h4>
-<p>协商认证版本（NTLM v1/NTLM v2）</p>
-<h4 id="2-质询">2. <strong>质询</strong></h4>
-<p>**挑战（Chalenge）/响应（Response）**认证机制。步骤如下：</p>
-<ol>
-<li>客户端向服务端发送用户信息（用户名）请求</li>
-<li>服务端接受到请求，生成一个16位的随机数，成为&quot;Challenge&quot;，服务端查询用户名所对应的NTLM Hash，用该哈希加密&quot;Challeng&quot;，保存至内存中，称之为&quot;Challeng1&quot;，之后再将&quot;Challenge&quot;发送至客户端</li>
-<li>客户端收到&quot;Chanlleng&quot;后，同样的使用自己的NTLM Hash，对&quot;Challenge&quot;进行加密比对，生成Response传递给客户端</li>
-</ol>
-<p>其中NTLM Hash加密Challenge的结果，在协议中称为Net NTLM Hash</p>
-<h4 id="3-验证">3. 验证</h4>
-<p>客户端收到上述的Response，与内存中的Chanllenge1进行比对，完成验证</p>
-<h2 id="域认证kerberos">域认证（Kerberos）</h2>
-<p>Kerberos 是一种网络认证协议，其设计目标是通过密钥系统为客户机 / 服务器应用程序提供强大的认证服务。该认证过程的实现不依赖于主机操作系统的认证，无需基于主机地址的信任，不要求网络上所有主机的物理安全，并假定网络上传送的数据包可以被任意地读取、修改和插入数据。在以上情况下， Kerberos 作为一种可信任的第三方认证服务，是通过传统的密码技术（如：共享密钥）执行认证服务的。</p>
-<p>域认证所包含的角色有：</p>
-<ul>
-<li>Client</li>
-<li>Server</li>
-<li>KDC(Key Distribution Centor) = DC</li>
-</ul>
-<h3 id="详细流程">详细流程</h3>
-<p>流程图如下所示：<br>
-<img src="https://chriskalix.github.io/post-images/1593159403049.png" alt="" loading="lazy"></p>
 ]]></content>
     </entry>
 </feed>
