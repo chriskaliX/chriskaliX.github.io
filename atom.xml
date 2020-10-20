@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-10-20T15:40:06.491Z</updated>
+    <updated>2020-10-20T16:00:41.552Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -547,7 +547,7 @@ void go(char * args, int alen) {
 ]]></content>
     </entry>
     <entry>
-        <title type="html"><![CDATA[Hvv小记]]></title>
+        <title type="html"><![CDATA[Hw外网到内网小记]]></title>
         <id>https://chriskalix.github.io/post/mvIL5VDju/</id>
         <link href="https://chriskalix.github.io/post/mvIL5VDju/">
         </link>
