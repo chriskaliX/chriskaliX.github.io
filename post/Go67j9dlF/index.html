@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" >
+
+<title>代码审计 tips 之 伪全局+文件包含 | chriskali&#39;s blog</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1604391670413">
+<link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
+
+
+
+<link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-181013881-1"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-181013881-1');
+</script>
+
+
+    <meta name="description" content="
+出现的频率有点高了，正好看到团队内的分享，但是没有复盘整理过，这里瞅一瞅
+
+伪全局
+
+自动变量注册，将用户输入的 GET ，POST 等自动注册为PHP变量即为伪全局
+
+&lt;?php
+$test=1;
+foreach($_REQUES..." />
+    <meta name="keywords" content="" />
+  </head>
+  <body>
+    <div id="app" class="main">
+
+      <div class="sidebar" :class="{ 'full-height': menuVisible }">
+  <div class="top-container" data-aos="fade-right">
+    <div class="top-header-container">
+      <a class="site-title-container" href="https://chriskalix.github.io">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1604391670413" class="site-logo">
+        <h1 class="site-title">chriskali&#39;s blog</h1>
+      </a>
+      <div class="menu-btn" @click="menuVisible = !menuVisible">
+        <div class="line"></div>
+      </div>
+    </div>
+    <div>
+      
+        
+          <a href="/" class="site-nav">
+            首页
+          </a>
+        
+      
+        
+          <a href="/archives" class="site-nav">
+            归档
+          </a>
+        
+      
+        
+          <a href="/tags" class="site-nav">
+            标签
+          </a>
+        
+      
+        
+          <a href="/post/about" class="site-nav">
+            关于
+          </a>
+        
+      
+    </div>
+  </div>
+  <div class="bottom-container" data-aos="flip-up" data-aos-offset="0">
+    <div class="social-container">
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    </div>
+    <div class="site-description">
+      Keep learning
+    </div>
+    <div class="site-footer">
+      chriskalix | <a class="rss" href="https://chriskalix.github.io/atom.xml" target="_blank">RSS</a>
+    </div>
+  </div>
+</div>
+
+
+      <div class="main-container">
+        <div class="content-container" data-aos="fade-up">
+          <div class="post-detail">
+            <h2 class="post-title">代码审计 tips 之 伪全局+文件包含</h2>
+            <div class="post-date">2020-11-03</div>
+            
+              <div class="feature-container" style="background-image: url('https://ss0.bdstatic.com/70cFvHSh_Q1YnxGkpoWK1HF6hhy/it/u=3297353376,3347855890&amp;fm=26&amp;gp=0.jpg')">
+              </div>
+            
+            <div class="post-content" v-pre>
+              <blockquote>
+<p>出现的频率有点高了，正好看到团队内的分享，但是没有复盘整理过，这里瞅一瞅</p>
+</blockquote>
+<h2 id="伪全局">伪全局</h2>
+<blockquote>
+<p>自动变量注册，将用户输入的 <code>GET</code> ，<code>POST</code> 等自动注册为PHP变量即为<strong>伪全局</strong></p>
+</blockquote>
+<pre><code class="language-php">&lt;?php
+$test=1;
+foreach($_REQUEST as $key =&gt; $value)
+{
+    $$key = $value;
+}
+echo $test;
+?&gt;
+</code></pre>
+<p>上述代码即为伪全局的伪代码，在传参<code>test=111</code>后，<code>$test</code>则会被自动覆盖为<code>111</code>。此时我们需要去<code>php.ini</code>中把<code>register_globals</code>开启。此时碰到了<code>register_globals</code>的版本问题，<a href="https://www.php.net/manual/zh/security.globals.php">官方文档</a>中指出，特性从<code>5.3.0</code>起废弃，<code>5.4.0</code>移除，从<code>4.2.0</code>起从默认的<code>on</code>更改为<code>off</code></p>
+<h3 id="tips">Tips</h3>
+<p><code>var_dump($_FILE)</code>会输出文件的详细地址并且包括临时的<code>tmp_name</code>，先给出上传的demo</p>
+<p>upload.html</p>
+<pre><code class="language-html">&lt;meta http-equiv=&quot;Content-Type&quot; content=&quot;text/html; charset=utf-8&quot; /&gt;
+&lt;form action=&quot;doaction.php&quot; method=&quot;post&quot; enctype=&quot;multipart/form-data&quot;&gt;
+    请选择文件：
+    &lt;input type=&quot;file&quot; name=&quot;myFile&quot;&gt;&lt;br&gt;
+    &lt;input type=&quot;submit&quot; value=&quot;上传文件&quot;&gt;
+&lt;/form&gt;
+</code></pre>
+<p>doaction.php</p>
+<pre><code class="language-php">&lt;?php
+foreach($_REQUEST as $key=&gt;$value)
+{
+    $$key=$value;
+}
+sleep(100);
+?&gt;
+</code></pre>
+<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1604370486854.png" alt="" loading="lazy"></figure>
+<p>可以看到在上传过程中，会有临时文件生成，在php文件运行结束后，临时文件删除。在windows下，临时文件的文件名的组合形式为<code>php(x{2-4}).tmp</code>，其中<code>x</code>为[0-9]以及[A-F]。这里看了小透明师傅的<a href="http://www.f4ckweb.top/index.php/archives/96/">博客</a>，得出的就是在<code>var_dump</code> FILE的名字加上一个很大长度的字符串，让PHP页面始终处于返回状态，但是我本机不是这样的，可能和我改过配置有关</p>
+<h3 id="fuzz与伪全局无关">FUZZ（与伪全局无关）</h3>
+<p>其实只要能让页面阻塞，<code>fuzz</code>也是可取的。但是个人认为仅限于<code>windows</code>下，原因有两点：</p>
+<ol>
+<li>向php的包含点循环包含自身并且上传文件，可以导致php崩溃而临时文件不被删除（win和linux下都可以）</li>
+<li>windows下的随机范围为<code>php(x{2-4}).tmp</code>，其中<code>x</code>为[0-9]以及[A-F]，而linux下是<code>php(x{6})</code>，显然后者的概率太大了</li>
+</ol>
+<h3 id="phpinfo">PHPINFO</h3>
+<blockquote>
+<p>如果有phpinfo，那么又有不同的方法了</p>
+</blockquote>
+<p>这里其他博客非常多了，不做更多的解释，贴下连接<br>
+<a href="https://www.cnblogs.com/xiaoqiyue/p/10158702.html">参考文章1</a><br>
+<a href="https://github.com/vulhub/vulhub/tree/master/php/inclusion">vulhub</a></p>
+<h2 id="总结">总结</h2>
+<p>仅利用伪全局太难了，需要的点太多。相比之下如果有一个包含点+PHPINFO的话基本就没有限制（PS. 前段时间还刚在CTF中碰到）</p>
+
+            </div>
+            
+            
+              <div class="next-post">
+                <div class="next">下一篇</div>
+                <a href="https://chriskalix.github.io/post/cobaltstrike/">
+                  <h3 class="post-title">
+                    CobaltStrike实操
+                  </h3>
+                </a>
+              </div>
+            
+
+            
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="application/javascript">
+
+AOS.init();
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+  <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>
+    hljs.initHighlightingOnLoad()
+  </script>
+
+
+
+
+
+  </body>
+</html>

@@ -2,7 +2,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://chriskalix.github.io</id>
     <title>chriskali&apos;s blog</title>
-    <updated>2020-10-22T05:52:26.150Z</updated>
+    <updated>2020-11-03T08:21:36.107Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://chriskalix.github.io"/>
     <link rel="self" href="https://chriskalix.github.io/atom.xml"/>
@@ -10,6 +10,67 @@
     <logo>https://chriskalix.github.io/images/avatar.png</logo>
     <icon>https://chriskalix.github.io/favicon.ico</icon>
     <rights>All rights reserved 2020, chriskali&apos;s blog</rights>
+    <entry>
+        <title type="html"><![CDATA[代码审计 tips 之 伪全局+文件包含]]></title>
+        <id>https://chriskalix.github.io/post/Go67j9dlF/</id>
+        <link href="https://chriskalix.github.io/post/Go67j9dlF/">
+        </link>
+        <updated>2020-11-03T01:54:34.000Z</updated>
+        <content type="html"><![CDATA[<blockquote>
+<p>出现的频率有点高了，正好看到团队内的分享，但是没有复盘整理过，这里瞅一瞅</p>
+</blockquote>
+<h2 id="伪全局">伪全局</h2>
+<blockquote>
+<p>自动变量注册，将用户输入的 <code>GET</code> ，<code>POST</code> 等自动注册为PHP变量即为<strong>伪全局</strong></p>
+</blockquote>
+<pre><code class="language-php">&lt;?php
+$test=1;
+foreach($_REQUEST as $key =&gt; $value)
+{
+    $$key = $value;
+}
+echo $test;
+?&gt;
+</code></pre>
+<p>上述代码即为伪全局的伪代码，在传参<code>test=111</code>后，<code>$test</code>则会被自动覆盖为<code>111</code>。此时我们需要去<code>php.ini</code>中把<code>register_globals</code>开启。此时碰到了<code>register_globals</code>的版本问题，<a href="https://www.php.net/manual/zh/security.globals.php">官方文档</a>中指出，特性从<code>5.3.0</code>起废弃，<code>5.4.0</code>移除，从<code>4.2.0</code>起从默认的<code>on</code>更改为<code>off</code></p>
+<h3 id="tips">Tips</h3>
+<p><code>var_dump($_FILE)</code>会输出文件的详细地址并且包括临时的<code>tmp_name</code>，先给出上传的demo</p>
+<p>upload.html</p>
+<pre><code class="language-html">&lt;meta http-equiv=&quot;Content-Type&quot; content=&quot;text/html; charset=utf-8&quot; /&gt;
+&lt;form action=&quot;doaction.php&quot; method=&quot;post&quot; enctype=&quot;multipart/form-data&quot;&gt;
+    请选择文件：
+    &lt;input type=&quot;file&quot; name=&quot;myFile&quot;&gt;&lt;br&gt;
+    &lt;input type=&quot;submit&quot; value=&quot;上传文件&quot;&gt;
+&lt;/form&gt;
+</code></pre>
+<p>doaction.php</p>
+<pre><code class="language-php">&lt;?php
+foreach($_REQUEST as $key=&gt;$value)
+{
+    $$key=$value;
+}
+sleep(100);
+?&gt;
+</code></pre>
+<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1604370486854.png" alt="" loading="lazy"></figure>
+<p>可以看到在上传过程中，会有临时文件生成，在php文件运行结束后，临时文件删除。在windows下，临时文件的文件名的组合形式为<code>php(x{2-4}).tmp</code>，其中<code>x</code>为[0-9]以及[A-F]。这里看了小透明师傅的<a href="http://www.f4ckweb.top/index.php/archives/96/">博客</a>，得出的就是在<code>var_dump</code> FILE的名字加上一个很大长度的字符串，让PHP页面始终处于返回状态，但是我本机不是这样的，可能和我改过配置有关</p>
+<h3 id="fuzz与伪全局无关">FUZZ（与伪全局无关）</h3>
+<p>其实只要能让页面阻塞，<code>fuzz</code>也是可取的。但是个人认为仅限于<code>windows</code>下，原因有两点：</p>
+<ol>
+<li>向php的包含点循环包含自身并且上传文件，可以导致php崩溃而临时文件不被删除（win和linux下都可以）</li>
+<li>windows下的随机范围为<code>php(x{2-4}).tmp</code>，其中<code>x</code>为[0-9]以及[A-F]，而linux下是<code>php(x{6})</code>，显然后者的概率太大了</li>
+</ol>
+<h3 id="phpinfo">PHPINFO</h3>
+<blockquote>
+<p>如果有phpinfo，那么又有不同的方法了</p>
+</blockquote>
+<p>这里其他博客非常多了，不做更多的解释，贴下连接<br>
+<a href="https://www.cnblogs.com/xiaoqiyue/p/10158702.html">参考文章1</a><br>
+<a href="https://github.com/vulhub/vulhub/tree/master/php/inclusion">vulhub</a></p>
+<h2 id="总结">总结</h2>
+<p>仅利用伪全局太难了，需要的点太多。相比之下如果有一个包含点+PHPINFO的话基本就没有限制（PS. 前段时间还刚在CTF中碰到）</p>
+]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CobaltStrike实操]]></title>
         <id>https://chriskalix.github.io/post/cobaltstrike/</id>
@@ -1475,99 +1536,6 @@ UAC的知识点没有看过，这次靶机遇到了，稍微补习一下（毕�
 <li>票据存留</li>
 </ol>
 <p>做完之后原理性的东西需要再加以总结，另外有些虎头蛇尾，还是继续看一看域环境，加深印象</p>
-]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[域渗透基础知识(三)-思维导图补充]]></title>
-        <id>https://chriskalix.github.io/post/3dogm6EPG/</id>
-        <link href="https://chriskalix.github.io/post/3dogm6EPG/">
-        </link>
-        <updated>2020-06-27T07:24:14.000Z</updated>
-        <content type="html"><![CDATA[<blockquote>
-<p>这段时间看内网基础的时候，看到一个比较好的脑图，忘记从哪里抄来的了...不过作者写的很好，我就跟着梳理一下</p>
-</blockquote>
-<h2 id="思维导图">思维导图</h2>
-<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1593399265693.png" alt="" loading="lazy"></figure>
-<h2 id="分类梳理">分类梳理</h2>
-<blockquote>
-<p>对于已经了解过的就不重复梳理</p>
-</blockquote>
-<h3 id="ntlm系列">NTLM系列</h3>
-<h4 id="中间人">中间人</h4>
-<blockquote>
-<p>Net-NTLM可通过中间人+hashcat破解</p>
-</blockquote>
-<h5 id="前置知识">前置知识</h5>
-<h6 id="中间人相关">中间人相关</h6>
-<p>LLMNR（Link-Local Multicast Name Resolution）：</p>
-<ul>
-<li>主机在自己的内部名称缓存中查询名称。如果在缓存中没有找到名称，那么主机就会向自己配置的主DNS服务器发送查询请求。如果主机没有收到回应或收到了错误信息，主机还会尝试搜索配置的备用DNS服务器。如果主机没有配置DNS服务器，或者如果在连接DNS服务器的时候没有遇到错误但失败了，那么名称解析会失败，并转为使用LLMNR</li>
-<li>主机通过用户数据报协议(UDP)发送多播查询，查询主机名对应的IP地址，这个查询会被限制在本地子网(也就是所谓的链路局部)内</li>
-<li>链路局部范围内每台支持LLMNR，并且被配置为响应传入查询的主机在收到这个查询请求后，会将被查询的名称和自己的主机名进行比较。如果没有找到匹配的主机名，那么计算机就会丢弃这个查询。如果找到了匹配的主机名，这台计算机会传输一条包含了自己IP地址的单播信息给请求该查询的主机</li>
-</ul>
-<p><strong>简单来说，DNS名称服务器请求失败时，就会通过链路本地多播名称解析（LLMNR）以及Net-BIOS名称服务，试图在本地进行名称解析</strong></p>
-<p>NBT-NS（Netbios Name Service）：</p>
-<ul>
-<li>与上述基本相同</li>
-</ul>
-<p><strong>二者区别</strong>：</p>
-<ul>
-<li>NetBIOS基于广播，而LLMNR基于多播</li>
-<li>NetBIOS在WindowsNT以后的所有操作系统上均可用，而只有WindowsVista和更高版本才支持LLMNR</li>
-<li>LLMNR还支持IPv6，而NetBIOS不支持，因此，在启用了IPv6，但对IPv6管理不如IPv4那样细致的复杂网络中，就可能发生更广泛的攻击</li>
-</ul>
-<h6 id="挑战认证相关">挑战认证相关</h6>
-<p>SSPI（Security Service Provider Interface）：</p>
-<p>​	这是Windows定义的一套接口，定义了安全有关的函数功能，包括但是不限于</p>
-<ul>
-<li>身份认证机制</li>
-<li>为其他协议提供的Session security机制</li>
-<li>...</li>
-</ul>
-<p>SSP（Security Service Provider）：</p>
-<p>​	SSPI的实现者，微软实现了以下的SSP</p>
-<ul>
-<li>NTLM SSP</li>
-<li>Kerberos</li>
-<li>Cred SSP</li>
-<li>...</li>
-</ul>
-<h5 id="从理论上理解">从理论上理解</h5>
-<p>使用工具 <code>Responder</code>，在内网环境下，假设用户访问一个不存在的UNC路径，则最后会在局域网内发送LLMNR（或者NBNS？）请求，<code>Responder</code> 的作用就是回复这些请求，那么用户和攻击机（即<code>Responder</code>所在机器）发起质询和响应，可以截获到NLTMv2 SSP。</p>
-<p>在本机测试后，即使弹出了登录框，输入密码后还是NTLMv2 SSP，因为是NTLM认证呀...可能和设置有关吧（其他文章里直接获取了明文密码），埋一个坑，后续再看。</p>
-<h6 id="缺点">缺点</h6>
-<ol>
-<li>感觉触发的概率不是很大</li>
-<li>跑的不是NTLM Hash，是NTLM-v1/v2 Hash，只能通过本地用Hashcat跑，比硬件</li>
-</ol>
-<h5 id="参考文章">参考文章</h5>
-<p><a href="https://blog.csdn.net/wxh0000mm/article/details/105997105">发起NTLM</a></p>
-<ul>
-<li>Outlook ：<code>&lt;img src=&quot;\\172.16.100.1\outlook&quot;&gt;</code></li>
-<li>OFFICE ：钓鱼可用</li>
-<li>Mysql：load_file同样支持unc</li>
-</ul>
-<h3 id="kerberos系列">Kerberos系列</h3>
-<h4 id="ms14-068">MS14-068</h4>
-<p>首先补丁为<code>kb3011780</code><br>
-原理：用户在向KDC申请TGT的时候，申明自己有域管理员权限，而KDC没有校验该票据的签名，导致权限提升。-&gt;从&lt;&lt;内网安全攻防&gt;&gt;摘录<br>
-但是思考了以下觉得不对啊，看Kerberos认证里，第一步的时候如果申请了，AS会校验用户hash。查阅其他人的文章，找到如下：<br>
-Client向AS(KDC)发送KRB_AS_REQ请求时，申请一张不包含PAC的TGT票据。并在Client向TGS发送KRB_TGS_REQ请求时，重新构造高权限TGT及PAC发送给TGS，TGS会返回一个新的TGT。<br>
-那么发现了，其实申请TGT是第二部，书里也写了，只是我没看到...</p>
-<h3 id="token系列">Token系列</h3>
-<p>分类：</p>
-<ul>
-<li>Delegation Tokens授权令牌</li>
-<li>Impersonation Tokens模拟令牌</li>
-</ul>
-<p><code>注：用户注销后会切换至模拟令牌，不会注销</code></p>
-<p>我认为这个是本地登录过administrator的情况才有？</p>
-<p>常见的<code>msf</code>操作：</p>
-<ul>
-<li><code>load incognito</code></li>
-<li><code>list_tokens -u</code></li>
-<li><code>impoersonate_token &quot;NT AUTHORITY\\SYSTEM&quot;</code>（这里为上述列举出的token，如果存在就直接提权成功）</li>
-</ul>
 ]]></content>
     </entry>
 </feed>
