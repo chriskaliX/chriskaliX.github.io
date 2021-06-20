@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" >
+
+<title>Flink 实战开发笔记 | chriskali&#39;s blog</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1624179845637">
+<link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
+
+
+
+<link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-181013881-1"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-181013881-1');
+</script>
+
+
+    <meta name="description" content="Flink 实时计算开发笔记
+
+本文主要用于记录在实际过程中的，从 Flink 开始学习，问题排查，到运行的一个记录。最好的文档永远永远是官方文档。同时很多地方可能不是最新版本(1.13.0)，因为远程部署的环境不兼容，为1.10.0以下的..." />
+    <meta name="keywords" content="" />
+  </head>
+  <body>
+    <div id="app" class="main">
+
+      <div class="sidebar" :class="{ 'full-height': menuVisible }">
+  <div class="top-container" data-aos="fade-right">
+    <div class="top-header-container">
+      <a class="site-title-container" href="https://chriskalix.github.io">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1624179845637" class="site-logo">
+        <h1 class="site-title">chriskali&#39;s blog</h1>
+      </a>
+      <div class="menu-btn" @click="menuVisible = !menuVisible">
+        <div class="line"></div>
+      </div>
+    </div>
+    <div>
+      
+        
+          <a href="/" class="site-nav">
+            首页
+          </a>
+        
+      
+        
+          <a href="/archives" class="site-nav">
+            归档
+          </a>
+        
+      
+        
+          <a href="/tags" class="site-nav">
+            标签
+          </a>
+        
+      
+        
+          <a href="/post/about" class="site-nav">
+            关于
+          </a>
+        
+      
+    </div>
+  </div>
+  <div class="bottom-container" data-aos="flip-up" data-aos-offset="0">
+    <div class="social-container">
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    </div>
+    <div class="site-description">
+      Keep learning
+    </div>
+    <div class="site-footer">
+      chriskalix | <a class="rss" href="https://chriskalix.github.io/atom.xml" target="_blank">RSS</a>
+    </div>
+  </div>
+</div>
+
+
+      <div class="main-container">
+        <div class="content-container" data-aos="fade-up">
+          <div class="post-detail">
+            <h2 class="post-title">Flink 实战开发笔记</h2>
+            <div class="post-date">2021-06-20</div>
+            
+            <div class="post-content" v-pre>
+              <h1 id="flink-实时计算开发笔记">Flink 实时计算开发笔记</h1>
+<blockquote>
+<p>本文主要用于记录在实际过程中的，从 Flink 开始学习，问题排查，到运行的一个记录。最好的文档永远永远是<a href="https://ci.apache.org/projects/flink/flink-docs-release-1.13/zh/">官方文档</a>。同时很多地方可能不是最新版本(1.13.0)，因为远程部署的环境不兼容，为1.10.0以下的版本。希望大家一起学习，共勉</p>
+</blockquote>
+<h2 id="flink-简介">Flink 简介</h2>
+<p><strong>Apache Flink</strong>是由<a href="https://baike.baidu.com/item/Apache%E8%BD%AF%E4%BB%B6%E5%9F%BA%E9%87%91%E4%BC%9A/2912769">Apache软件基金会</a>开发的开源流处理框架，其核心是用Java和Scala编写的分布式流数据流引擎。Flink以数据并行和流水线方式执行任意流数据程序，Flink的流水线运行时系统可以执行批处理和流处理程序。此外，Flink的运行时本身也支持迭代算法的执行。(百度百科复制)</p>
+<h2 id="基本概念">基本概念</h2>
+<blockquote>
+<p>一些基本概念</p>
+</blockquote>
+<h3 id="有界数据-无界数据">有界数据 &amp; 无界数据</h3>
+<p>有界数据：通常有一段确定的数据，如某个时段时间的订单量，文件中的数据等。数据为静态的，有界的。对于这样的数据处理我们称之为 Batch Processing，即批处理。</p>
+<p>无界数据：对于像从 kafka 读取数据等，源源不断的，持续追加的数据，称之为无界数据。例如一个网站的访问日志，HIDS产生的日志等。对于这样的数据处理我们称之为 Streaming Processing，即流处理</p>
+<h2 id="大致流程">大致流程</h2>
+<h3 id="etl">ETL</h3>
+<blockquote>
+<p>一种常见的 Flink 使用场景， E(extract) T(transform) L(load)，从一个数据源或者多个读取数据，进行转换操作和信息补充，将结果存储起来。有时我们需要存储中间数据打入至es(因为这种二级数据源可能会有多个使用方)</p>
+</blockquote>
+<h3 id="实时数据处理">实时数据处理</h3>
+<blockquote>
+<p>画了一个简简单单的草图</p>
+</blockquote>
+<figure data-type="image" tabindex="1"><img src="https://chriskalix.github.io/post-images/1624179814992.png" alt="" loading="lazy"></figure>
+<p>简单的，对于 Flink 或者对于其他的数据处理(我认为)，有三个简易部分。第一就是数据源读取，第二为处理部分(由 Operator(算子))组成，第三部分 sink，即数据输出。</p>
+<h2 id="从-source-到-sink">从 source 到 sink</h2>
+<blockquote>
+<p>这一部分主要简单的阐述以下，Flink 中从 source 到 sink 的一个流程，以及其中涉及的一些知识点</p>
+</blockquote>
+<h3 id="datastream">DataStream</h3>
+<blockquote>
+<p>前面提到了，数据类型有其他类型(如 fromCollection，readTextFile 等多种数据源)，因为做的时候没有涉及到离线计算相关的，所以这里主要记录流数据相关</p>
+</blockquote>
+<h3 id="执行环境获取">执行环境获取</h3>
+<p>首先我们要做的是，获取执行环境。对于流式数据，获取环境代码为</p>
+<pre><code class="language-java">final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+</code></pre>
+<p>每个 Flink 应用都需要用到运行环境，不同类型的数据集对应的环境不同。为什么需要设定运行的环境？这时候搬运一下官方的文档，先上一个图：<br>
+<img src="https://ci.apache.org/projects/flink/flink-docs-release-1.13/fig/distributed-runtime.svg" alt="" loading="lazy"></p>
+<p>配上官方文字：DataStream API 将你的应用构建为一个 job graph，并附加到 <code>StreamExecutionEnvironment</code> 。当调用 <code>env.execute()</code> 时此 graph 就被打包并发送到 JobManager 上，后者对作业并行处理并将其子任务分发给 Task Manager 来执行。每个作业的并行子任务将在 <em>task slot</em> 中执行。这里提到了一些概念，虽然说不懂也不影响继续开发，但是我们还是稍微了解一下(可以跳过，主要为搬运)</p>
+<h4 id="jobmanager-taskmanager">JobManager &amp; TaskManager</h4>
+<blockquote>
+<p>当然，这由涉及到了 Flink 相关的架构，我们先上一个架构图</p>
+</blockquote>
+<figure data-type="image" tabindex="2"><img src="https://ci.apache.org/projects/flink/flink-docs-release-1.13/fig/processes.svg" alt="The processes involved in executing a Flink dataflow" loading="lazy"></figure>
+<p>首先一个Flink在运行的时候会有一个 JobManager(高可用设置有多个，一个leader其他都是standby)，有一个或者多个的 TaskManager。</p>
+<p>JobManager：和它的名字一样，协调 Flink 分布式执行调度。它决定什么时候调度下一个 Task，对完成的 task 或者失败做出反应，调度 checkpoint (这个后面再讲)，协调从失败中恢复等等。它里面包含了 <code>ResourceManager</code> (资源管理)，<code>Dispatcher</code> 提供接口用于提交 Flink 应用程序执行，<code>JobMaster</code> 负责一个 JobGraph</p>
+<hr>
+<p>之后再调用 <code>execute()</code> 提交给 <code>TaskManager</code></p>
+<h3 id="添加数据源">添加数据源</h3>
+<blockquote>
+<p>数据源通常可能有多个，例如kafka + 实时配置文件等</p>
+</blockquote>
+<p>以 Kafka 数据源为例</p>
+<pre><code class="language-java">// 获取 kafka consumer
+FlinkKafkaConsumer&lt;ObjectNode&gt; consumer = new FlinkKafkaConsumer&lt;&gt;(TOPIC, new JSONKeyValueDeserializationSchema(false),props);
+// 添加数据源
+DataStreamSource&lt;ObjectNode&gt; kafkaSource = env.addSource(consumer);
+</code></pre>
+<p>这时我们读取进来的是基本的原始日志，通常我们需要做解析成其他模式，如 POJOs 或者 Tuple。</p>
+<h4 id="boardcast-实现实时配置读取">Boardcast 实现实时配置读取</h4>
+<h3 id="数据解析-过滤">数据解析 &amp; 过滤</h3>
+<blockquote>
+<p>关键词 flatMap，map</p>
+</blockquote>
+<h4 id="解析">解析</h4>
+<p>我们要将一个 DataStreamSource 转化为之后处理的 DataStream，我们需要对进来的数据做处理，例如一种常见的情况就是做日志解析。我们需要将一个字符串或者 Json 形式的数据源，转化为一个对象，方便后面的处理以及计算。</p>
+<pre><code class="language-java">// 写一个 POJO , 当然实际场景的字段肯定比这个要丰富，这里仅仅举例
+import lombok.Data;
+
+@Data
+public class Log {
+    public String host;
+    public String path;
+    public String ip;
+    public String time;
+    public String userAgent;
+}
+</code></pre>
+<p>结合简单代码我们看一下 flatMap相关使用</p>
+<pre><code class="language-java">// 在另一个文件中定义用的转换，这里使用 flatMap，因为不涉及嵌套的情况
+// 参数1为输入的数据类型，参数2为输出的数据类型
+public class Parser extends RichFlatMapFunction&lt;ObjectNode, Log&gt; {
+    // 必须实现的 flatMap，实现了父类的抽象方法
+    // 这里阐述一下继承关系：为 Parser -&gt; RichFlatMapFunction(抽象类) -&gt; AbstractRichFunction(抽象类)
+    // 其中 AbstractRichFunction 实现了 open() 等，在后续状态相关的内容我们再阐述
+    @Override
+    public void flatMap(ObjectNode node, Collector&lt;Log&gt; collector) throws Exception {
+        // 实现解析，具体函数不写了
+        Log log = parseLog(node);
+        // 跳过解析失败的情况
+        if(log != null) {
+            collector.collect(log);
+        }
+    }
+}
+</code></pre>
+<pre><code class="language-java">// 将上述的 kafka 数据源做转换
+SingleOutputStreamOperator&lt;Log&gt; log = kafkasource.flatMap(new Parser());
+</code></pre>
+<h4 id="过滤">过滤</h4>
+<blockquote>
+<p>有些数据我们需要过滤，以排除干扰</p>
+</blockquote>
+<p>同样的我们以例子为例，例如我们不需要百度爬虫的流量进入到后续的计算中，那么过滤如下</p>
+<pre><code class="language-java">public class Filter implements FilterFunction&lt;Log&gt; {
+    @Override
+    public boolean filter(Log log) throws Exception {
+        // 过滤掉百度爬虫的请求，不需要的则返回 false
+        if(log.userAgent.equals(&quot;baidu-spider&quot;)) {
+            return false;
+        }
+        return true;
+    }
+}
+</code></pre>
+<p>直接将<code>filter</code>挂在<code>flatMap</code>后面即可</p>
+<pre><code class="language-java">SingleOutputStreamOperator&lt;Log&gt; log = kafkasource.flatMap(new Parser()).filter(new Filter());
+</code></pre>
+<h3 id="关键点-1-watermark">关键点 1 : WaterMark</h3>
+<blockquote>
+<p>水印，是每个写 Flink 的小伙伴们绕不开的概念，从刚开始看就比较混乱，这里梳理一下</p>
+</blockquote>
+<h4 id="what-why-watermark">What &amp; Why WaterMark</h4>
+<blockquote>
+<p>时间语义</p>
+</blockquote>
+<p>首先，为什么会有水印这个东西？这又要从时间语义说起。例如我们现在有一个简单的要求，需要 Flink 实现一个统计，计算 1 分钟内，某个 URL 的请求次数。那么我们理所应当的认为，只要从第一个包进来，我们开始计时间，等到一分钟，我们截至即可。这是我们默认的认为，处理的时间基准为（<code>Ingestion Time</code> 即进入 Flink 开始的时间|或者是当前操作系统的时间<code>Processing Time</code>）。<br>
+时间语义有三种 事件时间(<code>Event Time</code>)，处理时间（<code>Processing Time</code>），进入时间 <code>Ingestion Time</code>，而通常情况下，我们需要使用到 事件时间作为处理的事件基准。</p>
+<blockquote>
+<p>WaterMark</p>
+</blockquote>
+<p>WaterMark 是以 事件时间 为基准的时候生效的，它用于告诉算子当前的最大时间戳。为什么?因为其他两种时间是有序的，而事件时间是乱序的(短范围内)。例如我们举一个简单的例子，我们消费 kafka 中的访问日志，而访问日志从哪里来的呢，可能是从 nginx 或者其他中间件的集群中采集进来的。那么我们消费的过程中没办法保证时间（在短范围内）是有序的。例如，我们消费后，拿到的时间是这样的(假设一秒一个的数据，共10个)</p>
+<pre><code class="language-txt"> 1 3 4 2 5 6 7 8 10 9 (事件时间)
+</code></pre>
+<p>它在总的方向上是递增的，但是在局部范围内会存在乱序。当我们不以事件时间为基准，那么我们拿到的数据就有可能会缺少。WaterMark 就是一个告知 Flink，当前这条信息的事件时间是什么，后续方便对这种乱序的情况处理。对一条数据，我们会根据它的时间戳(不同格式)，为他打上水印。同样，我们看一份简单的代码</p>
+<pre><code class="language-java">// 打上周期性的 WaterMark
+public class WaterMark implements AssignWithPeriodicWatermarks&lt;Log&gt; {
+    // 最大延时时间
+    private long delayMax = 3000L;
+    // 获取当前的时间
+    private long currentMaxTimestamp = 0L;
+    // 提取时间戳
+    @Override
+    public long extractTimeStamp(Log log, long previousElementTimestamp) {
+        // Transform 自己实现，就是提成 unix 的
+        long timestamp = Transform(log.getTime());
+        // 如果获取到的时间戳比之前的都要大，那么我们更新
+        if (timestamp &gt; currentMaxTimestamp) {
+            currentMaxTimestamp = timestamp;
+        }
+        return timestamp;
+    }
+    // 生成水印 WaterMark
+    @Override
+    public Watermark getCurrentWatermark() {
+        return new Watermark(currentMaxTimestamp - delayMax);
+    }
+}
+</code></pre>
+<p>还有另外一种打水印的方式，为 <code>PunctuatedWatermarks</code> ，根据特殊事件触发，由用户自己来设定，由于没使用到这个，就不展开了</p>
+<h4 id="相关设置">相关设置</h4>
+<pre><code class="language-java">// 同时我们需要指定环境使用事件时间
+env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
+// 设定 watermark 的周期，涉及到性能,这里比如说是一毫秒一个
+env.getConfig().setAutoWatermarkInterval(100L);
+</code></pre>
+<h3 id="关键点-2-window">关键点 2 : Window</h3>
+<blockquote>
+<p>窗口是 Flink 中一个重要的概念，对于无限的流数据，我们通过 Window 将其划分成有限的桶进行计算。我们以统计访问量为例子</p>
+</blockquote>
+<p>首先 Window 分为 Keyed Windows &amp; Non-keyed Windows。简单的认为 Keyed Windows是一个有主键的窗口。当我们统计每个 Url 的访问量时，需要先按照 Url 做划分，相同 Url 的走到同一个窗口下进行统计计数。</p>
+<p>对于 Keyed Windows</p>
+<pre><code class="language-java">stream
+       .keyBy(...)               &lt;-  keyed versus non-keyed windows
+       .window(...)              &lt;-  required: &quot;assigner&quot;
+      [.trigger(...)]            &lt;-  optional: &quot;trigger&quot; (else default trigger)
+      [.evictor(...)]            &lt;-  optional: &quot;evictor&quot; (else no evictor)
+      [.allowedLateness(...)]    &lt;-  optional: &quot;lateness&quot; (else zero)
+      [.sideOutputLateData(...)] &lt;-  optional: &quot;output tag&quot; (else no side output for late data)
+       .reduce/aggregate/apply()      &lt;-  required: &quot;function&quot;
+      [.getSideOutput(...)]      &lt;-  optional: &quot;output tag&quot;
+</code></pre>
+<p>Non-Keyed Windows</p>
+<pre><code class="language-java">stream
+       .windowAll(...)           &lt;-  required: &quot;assigner&quot;
+      [.trigger(...)]            &lt;-  optional: &quot;trigger&quot; (else default trigger)
+      [.evictor(...)]            &lt;-  optional: &quot;evictor&quot; (else no evictor)
+      [.allowedLateness(...)]    &lt;-  optional: &quot;lateness&quot; (else zero)
+      [.sideOutputLateData(...)] &lt;-  optional: &quot;output tag&quot; (else no side output for late data)
+       .reduce/aggregate/apply()      &lt;-  required: &quot;function&quot;
+      [.getSideOutput(...)]      &lt;-  optional: &quot;output tag&quot;
+</code></pre>
+<p>Window 同时又分为四个， <code>全局窗口</code> ，<code>会话窗口</code>，<code>滑动窗口</code>，<code>滚动窗口</code>。首先我们以上述的场景为例子，实践一下。</p>
+<h4 id="窗口类型">窗口类型</h4>
+<h5 id="滚动窗口">滚动窗口</h5>
+<blockquote>
+<p>关键词：<code>TumblingEventTimeWindows</code></p>
+</blockquote>
+<pre><code class="language-java">SingleOutputStreamOperator&lt;Log&gt; log = kafkasource.flatMap(new Parser());
+//这里简单的按照 Path 做，也可以使用 Tuple 做 keyBy 操作
+log.KeyBy(&quot;Path&quot;).window(TumblingEventTimeWindows.of(Time.Seconds(60)));
+</code></pre>
+<figure data-type="image" tabindex="3"><img src="https://ci.apache.org/projects/flink/flink-docs-release-1.13/fig/tumbling-windows.svg" alt="Tumbling Windows" loading="lazy"></figure>
+<h5 id="滑动窗口">滑动窗口</h5>
+<blockquote>
+<p>关键词：<code>SlidingEventTimeWindow</code></p>
+</blockquote>
+<pre><code class="language-java">SingleOutputStreamOperator&lt;Log&gt; log = kafkasource.flatMap(new Parser());
+// 每 30 秒生成一个时间为 60 秒的窗口
+log.KeyBy(&quot;Path&quot;).window(SlidingEventTimeWindows.of(Time.Seconds(60),Time.seconds(30)));
+</code></pre>
+<figure data-type="image" tabindex="4"><img src="https://ci.apache.org/projects/flink/flink-docs-release-1.13/fig/sliding-windows.svg" alt="sliding windows" loading="lazy"></figure>
+<h5 id="会话窗口">会话窗口</h5>
+<blockquote>
+<p>这个并没有在实际项目中使用到过，所以简单的看一下图片。。</p>
+</blockquote>
+<figure data-type="image" tabindex="5"><img src="https://ci.apache.org/projects/flink/flink-docs-release-1.13/fig/session-windows.svg" alt="session windows" loading="lazy"></figure>
+<h5 id="全局窗口">全局窗口</h5>
+<blockquote>
+<p>全局窗口是将 Key 分类后归一到同一个窗口，不同的是它需要自定义触发器来进行关闭，然后进行聚合等后续的操作</p>
+</blockquote>
+<pre><code class="language-java">source.keyby(XXX).window(GlobalWindows.create())
+</code></pre>
+<h4 id="窗口生命周期">窗口生命周期</h4>
+<p>我们默认当第一个元素到达时，我们会创建对应 Window，当时间加上允许延迟(delay)时，窗口就会结束删除。Flink 只删除基于时间的，而不会删除其他的(如全局窗口)。此外每个窗口都会有一个触发器和一个窗口函数(这个待会会讲到)，另外还有 execitor，后续讲到</p>
+<h4 id="窗口聚合">窗口聚合</h4>
+<blockquote>
+<p>当窗口关闭之后，我们需要对窗口中的数据做计算。对于窗口中的数据，我们可以理解成为一个集合，通过窗口函数我们对集合内的数据进行计算，窗口函数有 <code>ReduceFunction</code>，<code>AggregateFunction</code>，<code>ProcessWindowFunction</code>（因为这个使用元素的迭代器(不知道翻译的对不对...Iterable)，相当于缓存窗口所有信息所以不能高效执行，一般通过配合另外两个窗口函数来减轻）</p>
+<p>其中Reduce &amp; Aggreate是增量聚合，窗口不维护原始的数据，只维护中间数据。根据中间数据和增量数据进行聚合计算。Process需要维护全部原始数据，触发后再进行全量聚合，所以效率偏低</p>
+</blockquote>
+<h5 id="reducefunction">ReduceFunction</h5>
+<blockquote>
+<p>注意的是输入和输出为同一个类型，简单的一个demo，从网上扒的，就是统计一定时间内的用户浏览商品价格最大值</p>
+</blockquote>
+<pre><code class="language-java">log.KeyBy(xxx).window(TumblingEventTimeWindows.of(Time.Seconds(60))).
+    reduce(new ReduceFunction&lt;Log&gt;(){
+        @Override
+        public Log reduce(Log log1, Log log2) throws Exception {
+            // Log 没有 price，demo方便理解
+            return log1.getPrice() &gt; log2.getPrice() ? log1 : log2
+        }
+    })
+</code></pre>
+<h5 id="aggregatefunction">AggregateFunction</h5>
+<blockquote>
+<p>这相当于是一个通用版本的 reducefunction，也能理解为是一个加强版。该函数有三个类型，输入类型 IN，累加器类型 ACC 以及输出类型 OUT</p>
+</blockquote>
+<p>从官方案例上我们扒下来</p>
+<pre><code class="language-java">private static class AverageAggregate
+    implements AggregateFunction&lt;Tuple2&lt;String, Long&gt;, Tuple2&lt;Long, Long&gt;, Double&gt; {
+  @Override
+  // 创建累加器
+  public Tuple2&lt;Long, Long&gt; createAccumulator() {
+    return new Tuple2&lt;&gt;(0L, 0L);
+  }
+
+  // 将输入的数据添加值累加器中
+  @Override
+  public Tuple2&lt;Long, Long&gt; add(Tuple2&lt;String, Long&gt; value, Tuple2&lt;Long, Long&gt; accumulator) {
+    return new Tuple2&lt;&gt;(accumulator.f0 + value.f1, accumulator.f1 + 1L);
+  }
+
+  // 结果获取
+  @Override
+  public Double getResult(Tuple2&lt;Long, Long&gt; accumulator) {
+    return ((double) accumulator.f0) / accumulator.f1;
+  }
+
+  // 累加器之间聚合
+  @Override
+  public Tuple2&lt;Long, Long&gt; merge(Tuple2&lt;Long, Long&gt; a, Tuple2&lt;Long, Long&gt; b) {
+    return new Tuple2&lt;&gt;(a.f0 + b.f0, a.f1 + b.f1);
+  }
+}
+
+DataStream&lt;Tuple2&lt;String, Long&gt;&gt; input = ...;
+
+input
+    .keyBy(&lt;key selector&gt;)
+    .window(&lt;window assigner&gt;)
+    .aggregate(new AverageAggregate());
+</code></pre>
+<p>例如我们需要统计每一分钟，这个 path 的访问量，就可以通过 <code>Aggregate</code> 做统计</p>
+<h5 id="processwindowfunction">ProcessWindowFunction</h5>
+<blockquote>
+<p>全量，灵活性相对更好但是性能方面受限并且由于缓存，也需要消耗更多的资源。我没有在实际项目中使用到这个，所以就只搬运一下官网的案例</p>
+</blockquote>
+<pre><code class="language-java">DataStream&lt;Tuple2&lt;String, Long&gt;&gt; input = ...;
+
+input
+  .keyBy(t -&gt; t.f0)
+  .window(TumblingEventTimeWindows.of(Time.minutes(5)))
+  .process(new MyProcessWindowFunction());
+
+/* ... */
+
+public class MyProcessWindowFunction 
+    extends ProcessWindowFunction&lt;Tuple2&lt;String, Long&gt;, String, String, TimeWindow&gt; {
+
+  @Override
+  public void process(String key, Context context, Iterable&lt;Tuple2&lt;String, Long&gt;&gt; input, Collector&lt;String&gt; out) {
+    long count = 0;
+    for (Tuple2&lt;String, Long&gt; in: input) {
+      count++;
+    }
+    out.collect(&quot;Window: &quot; + context.window() + &quot;count: &quot; + count);
+  }
+}
+</code></pre>
+<h5 id="processwindowfunction-与-增量聚合-结合使用">ProcessWindowFunction 与 增量聚合 结合使用</h5>
+<blockquote>
+<p>当元素到达的时候，使用Reduce &amp; Aggregate 做增量聚合，当窗口关闭的时候 ProcessWindowFunction 对增量聚合的结果再进行全量聚合，通常当我们需要访问窗口的元数据(metadata)的时候，例如窗口创建时间，窗口结束时间，窗口的状态等(使用增量无法访问到的)</p>
+<p>联合使用相当于是对最终数据的补充（补充窗口数据）(我的理解)</p>
+</blockquote>
+<p>扒一个官网的案例：Reduce</p>
+<pre><code class="language-java">DataStream&lt;SensorReading&gt; input = ...;
+
+input
+  .keyBy(&lt;key selector&gt;)
+  .window(&lt;window assigner&gt;)
+  .reduce(new MyReduceFunction(), new MyProcessWindowFunction());
+
+// Function definitions
+
+private static class MyReduceFunction implements ReduceFunction&lt;SensorReading&gt; {
+
+  public SensorReading reduce(SensorReading r1, SensorReading r2) {
+      return r1.value() &gt; r2.value() ? r2 : r1;
+  }
+}
+
+private static class MyProcessWindowFunction
+    extends ProcessWindowFunction&lt;SensorReading, Tuple2&lt;Long, SensorReading&gt;, String, TimeWindow&gt; {
+
+  public void process(String key,
+                    Context context,
+                    Iterable&lt;SensorReading&gt; minReadings,
+                    Collector&lt;Tuple2&lt;Long, SensorReading&gt;&gt; out) {
+      SensorReading min = minReadings.iterator().next();
+      out.collect(new Tuple2&lt;Long, SensorReading&gt;(context.window().getStart(), min));
+  }
+}
+</code></pre>
+<p>案例为同时获取最小值 &amp; 窗口开始时间</p>
+<p>Aggregate：</p>
+<pre><code class="language-java">DataStream&lt;Tuple2&lt;String, Long&gt;&gt; input = ...;
+
+input
+  .keyBy(&lt;key selector&gt;)
+  .window(&lt;window assigner&gt;)
+  .aggregate(new AverageAggregate(), new MyProcessWindowFunction());
+
+// Function definitions
+
+/**
+ * The accumulator is used to keep a running sum and a count. The {@code getResult} method
+ * computes the average.
+ */
+private static class AverageAggregate
+    implements AggregateFunction&lt;Tuple2&lt;String, Long&gt;, Tuple2&lt;Long, Long&gt;, Double&gt; {
+  @Override
+  public Tuple2&lt;Long, Long&gt; createAccumulator() {
+    return new Tuple2&lt;&gt;(0L, 0L);
+  }
+
+  @Override
+  public Tuple2&lt;Long, Long&gt; add(Tuple2&lt;String, Long&gt; value, Tuple2&lt;Long, Long&gt; accumulator) {
+    return new Tuple2&lt;&gt;(accumulator.f0 + value.f1, accumulator.f1 + 1L);
+  }
+
+  @Override
+  public Double getResult(Tuple2&lt;Long, Long&gt; accumulator) {
+    return ((double) accumulator.f0) / accumulator.f1;
+  }
+
+  @Override
+  public Tuple2&lt;Long, Long&gt; merge(Tuple2&lt;Long, Long&gt; a, Tuple2&lt;Long, Long&gt; b) {
+    return new Tuple2&lt;&gt;(a.f0 + b.f0, a.f1 + b.f1);
+  }
+}
+
+private static class MyProcessWindowFunction
+    extends ProcessWindowFunction&lt;Double, Tuple2&lt;String, Double&gt;, String, TimeWindow&gt; {
+
+  public void process(String key,
+                    Context context,
+                    Iterable&lt;Double&gt; averages,
+                    Collector&lt;Tuple2&lt;String, Double&gt;&gt; out) {
+      Double average = averages.iterator().next();
+      out.collect(new Tuple2&lt;&gt;(key, average));
+  }
+}
+</code></pre>
+<p>案例为使用 ProcessFunction 和 AggregateFunction 获取平均值，以及所对应的 key</p>
+<h4 id="窗口触发器">窗口触发器</h4>
+<blockquote>
+<p>触发器触发的是：何时触发窗口函数中的计算，其实每个窗口默认的时候都会有一个触发器。我们先看一下 Trigger 函数</p>
+</blockquote>
+<pre><code class="language-java">public abstract class Trigger&lt;T, W extends Window&gt; implements Serializable {
+
+	private static final long serialVersionUID = -4104633972991191369L;
+
+	// 来一个数据触发
+	public abstract TriggerResult onElement(T element, long timestamp, W window, TriggerContext ctx) throws Exception;
+
+	// ProcessingTime 定时器触发调用
+	public abstract TriggerResult onProcessingTime(long time, W window, TriggerContext ctx) throws Exception;
+
+	// Eventime 定时器调用，做日志实时分析的时候，用到的其实的这个
+	public abstract TriggerResult onEventTime(long time, W window, TriggerContext ctx) throws Exception;
+
+	public boolean canMerge() {
+		return false;
+	}
+
+	// 窗口merge调用
+	public void onMerge(W window, OnMergeContext ctx) throws Exception {
+		throw new UnsupportedOperationException(&quot;This trigger does not support merging.&quot;);
+	}
+
+	// 窗口清楚的时候调用
+	public abstract void clear(W window, TriggerContext ctx) throws Exception;
+}
+</code></pre>
+<p>触发器可以实现一些其他的功能，例如我们需要每访问 100 次，就输出一次，我们可以重写 onElement 实现。通过自定义 Trigger，我们也可以实现带超时时间的计数功能等。需要注意的是，Trigger 中的状态变量需要自己去管理，手动的去清除( fire &amp; purge )</p>
+<h4 id="窗口剔除器evictors">窗口剔除器(Evictors)</h4>
+<blockquote>
+<p>功能：在到达触发阈值后，在窗口函数之前或者之后删除元素，其分为 <code>count</code>,<code>Delta</code>,<code>Time</code>，这个我也没使用到过，就先pass了</p>
+</blockquote>
+<h4 id="设置允许迟到的时间">设置允许迟到的时间</h4>
+<blockquote>
+<p>默认为0，函数为 allowedLatenes</p>
+</blockquote>
+<hr>
+<p>sink部分比较简单，可以自行看一下，理论到这里就完成了简单的 source 到 sink</p>
+<h3 id="join">JOIN</h3>
+<h3 id="异步-io">异步 I/O</h3>
+<blockquote>
+<p>有时我们需要另外的数据源为当前数据源附加属性，例如访问日志，我们想判断这个 IP 是否在别的黑名单库中，这个黑名单库我们缓存在了 redis 里。由于实时性的问题，当访问量特别大的时候，我们可以使用异步 I/O（以及本地缓存）的方式，完成加速判断</p>
+</blockquote>
+<p>为什么要使用异步 I/O？我们贴上一个官方的图</p>
+<figure data-type="image" tabindex="6"><img src="https://ci.apache.org/projects/flink/flink-docs-release-1.13/fig/async_io.svg" alt="img" loading="lazy"></figure>
+<p>code demo</p>
+<pre><code class="language-java">DataStream&lt;Log&gt; asyncStream = AsyncDataStream.unorderedWait(stream(读取的source), new BlackList(), 1000(超时时间), TimeUnit.MILLISECONDS(时间单位), 1000(容量))
+</code></pre>
+<pre><code class="language-java">public class BlackList extends RichAsyncFunction&lt;Log, Log&gt; {
+    private xxxx redisclient;
+    // 在 open 中初始化 Redis client
+	@Override
+    public void open(Configuration parameters) from Exception {
+        xxx
+    }
+    
+    @Override
+    public void close() throws Exceptions {
+        super.close();
+        xxx
+    }
+    
+    @Override
+    public void asyncInvoke(Log log, ResultFuture&lt;Log&gt; logFuture) {
+        // 判断，并为log字段赋值
+        xxxxx;
+        
+        logFuture.complete(Collections.singleton(log))
+    }
+}
+</code></pre>
+<p>这个 demo 还能再优化以下，对于数据判断这个实时性不是很高的要求的情况下，可以再本地加一个 本地缓存，减少对 Redis 的请求。（可以使用 Google 的 cache）</p>
+<h2 id="flink-优化">Flink 优化</h2>
+<blockquote>
+<p>在我们开心的写完 Flink，打包运行的时候，会发现其他的一些问题</p>
+</blockquote>
+<h3 id="数据倾斜">数据倾斜</h3>
+<blockquote>
+<p>数据倾斜是经常碰到的问题，由于算子之间的数据分配不均衡，导致一些算子的计算量特别大，一些算子的计算量特别小，最终整体速度严重下滑，以一个实际碰到的例子作为讲解</p>
+</blockquote>
+<h4 id="实际情况-原因排查">实际情况 &amp; 原因排查</h4>
+<p>例如我们以 path 为key，开窗后聚合，统计每个 PATH 的一分钟访问量。这时候出现了一些问题，其现象为：刚开始的时候消费速度比较快，Flink 正常运行，但立马出现了反压，以及CheckPoint 超时并且消费速度急剧下滑，为最高速度的几十分之一，导致程序无法使用。</p>
+<p>数据倾斜会导致 GC 频繁，吞吐下降、延迟增大等等。我们通过查找反压点，最后发现了 Window 中 SubTasks 中的 数据接收(Bytes Received) 差别很大</p>
+<h4 id="解决方法">解决方法</h4>
+<p>既然是因为 Key 分布不均匀，我们可以再一开始的时候对Key进行加盐打散。原先我们使用的可能为以下：</p>
+<pre><code>stream.KeyBy(&quot;path&quot;).
+	Window(xxx).
+	aggregate(xxx).
+	sink(xxx)
+</code></pre>
+<p>由于一些 path 为热点数据，一些 path 很少访问，导致倾斜。对于这种 key 分布不均匀的统计场景，我们可以通过<strong>两阶段聚合</strong>的方式(加盐局部聚合&amp;window后去盐聚合)</p>
+<p>又到了借鉴图片的时候，图片如下</p>
+<figure data-type="image" tabindex="7"><img src="https://upload-images.jianshu.io/upload_images/195230-6af363bd713efc66.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1200" alt="img" loading="lazy"></figure>
+<p><code>code demo</code> 如下</p>
+<pre><code class="language-java">source.map((MapFunction&lt;Log, Log&gt;) log-&gt;{
+    //首先我们做加盐打散
+    log.setPath(log.getPath()+&quot;@&quot;+ThreadLocalRandom.current().nextInt(10))
+}).keyBy(&quot;path&quot;).
+    window(xxx).
+    allowedLateness(xx).
+    aggregate().
+    // 在这里去盐, 数据类型可能在 aggregate的时候就变了，这边只是做一个例子
+    .map((MapFunction&lt;Log, Log&gt;) log-&gt; {
+        log.setPath(log.getPath().substring(0, log.getPath().indexOf(&quot;@&quot;)))
+    })
+</code></pre>
+<h3 id="其他">其他</h3>
+<h4 id="反压背压">反压(背压)</h4>
+<blockquote>
+<p>什么是 back pressure? 当前生成数据的速度大于下游消费的速度，导致上游的速率也被限制</p>
+</blockquote>
+<p>导致反压的情况有很多，如上面所说的数据倾斜，算子并行度不足，Checkpoint等等。通常我们需要根据 Job 中的情况去反推，结合场景做优化</p>
+<h4 id="checkpoint">Checkpoint</h4>
+<h4 id="参数">参数</h4>
+<p>全局并行度设置<code>(env.setParallelism(xxx))</code></p>
+<h2 id="flink-结合-drools">Flink 结合 Drools</h2>
+<blockquote>
+<p>Nj 师傅说要把规则引擎挂到 Flink 里，其实也挺好的，但是由于我不会写 Drools，之前都是采用中间数据到再用bilibili的gengine实现。其实也不难，实现完毕后再补上</p>
+</blockquote>
+
+            </div>
+            
+            
+              <div class="next-post">
+                <div class="next">下一篇</div>
+                <a href="https://chriskalix.github.io/post/Go67j9dlF/">
+                  <h3 class="post-title">
+                    代码审计 tips 之 伪全局+文件包含
+                  </h3>
+                </a>
+              </div>
+            
+
+            
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="application/javascript">
+
+AOS.init();
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+  <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>
+    hljs.initHighlightingOnLoad()
+  </script>
+
+
+
+
+
+  </body>
+</html>
